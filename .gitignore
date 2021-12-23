@@ -3,6 +3,7 @@
 *.err
 *.log
 *~
+AddOn*
 
 # OS or Editor folders
 ._*
@@ -15,7 +16,9 @@
 
 
 # Folders to ignore
-/node_modules/
-/test/
+/dist/production
+/project/versions/
+/src/secure/
+/test/data/
 /tmp/
 /archives
