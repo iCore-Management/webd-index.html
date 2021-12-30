@@ -1,10 +1,10 @@
 ---
 name: Questions and Comments
 about: Let us know if you have questions or comments
-title: LabAccess [COMMENT]
+title: New Comment [COMMENT]
 labels: question
 assignees: ''
 
 ---
 
-**What do you want to know or say?**
+**What do you want to know or say?**  
