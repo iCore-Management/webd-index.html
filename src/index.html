@@ -1,6 +1,7 @@
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>iCore Management</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
 <iframe id="webdirect-frame" frameborder="0" allowfullscreen src=""
@@ -10,6 +11,7 @@ style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; hei
 
 let protocol = window.location.protocol;
 let hostname = window.location.hostname;
+document.title = hostname
 //Default location for FileMaker WebDirect
 const webd = "/fmi/webd";
 //alertText is presented to the user when the back button is pressed
@@ -25,7 +27,7 @@ let db = urlParams.get('db');
 var uri = protocol + "//" + hostname + webd ;
 if (db) {
 	uri = uri + '/' + db;
-	document.title = db;
+	document.title = hostname + ": " + db;
 }
 if (query) uri = uri + query;
 
