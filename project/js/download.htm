@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head><meta charset="UTF-8" />
+  <title>Downloading...</title>
+<!--  DOWNLOAD.HTM
+This web file uses the FileMaker Data API to authenticate to a database and download a container.
+An account name and password with "fmrest" extended privilege and acces to the database, layout, and fields is required.
+
+Parameters can be sent as url query parameters, a hex encoded JSON Object, or hard-coded to this file.
+The name of the container field to download, and the name of a field containing the filename must be included.
+Instead of the FileMaker record ID, a query field name and a query value can be included. The Data API is used to search the query field for the query value.
+
+https://example.com/download.htm?recordID=5432
+
+-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <script src="oauth_v1/auth.js"></script>
+
+    <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
+    <script>
+      const API = "barcode";
+  
+      const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
+      const SCRIPT = URL_PARAMETERS.get("script");
+      const WEBVIEWER = URL_PARAMETERS.get("webviewer");
+
+      const ACCOUNT = "fm_migration";
+      const PWD = "";
+      const AUTH = "Basic " + btoa(ACCOUNT + ":" + PWD);
+      //const authorization = authorize();
+      const VERSION = "vLatest";
+
+      const HOST = window.location.protocol + "//" + window.location.hostname + "/fmi/data/" + VERSION;
+      const OPTIONS = URL_PARAMETERS.get("file") ? URL_PARAMETERS.get("file") : "";
+      var settings;
+      if(OPTIONS.length) {
+
+        /* GET SETTINGS FROM FILE PARAMETER */
+        var str = "";
+        for (var i = 0; i < hex.length; i += 2) str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+        settings = JSON.parse (str);
+      } else if ( URL_PARAMETERS.get("db") ) {
+
+        /* GET SETTINGS FROM URL PARAMETERS */
+        settings = {
+          db : URL_PARAMETERS.get("db"),
+          lay : URL_PARAMETERS.get("lay"),
+          id : URL_PARAMETERS.get("id"),
+          key : URL_PARAMETERS.get("key"),
+          uuid : URL_PARAMETERS.get("uuid"),
+          container : URL_PARAMETERS.get("container"),
+          filename : URL_PARAMETERS.get("filename")
+        }
+      } else {
+
+        /* GET SETTINGS FROM HARD CODED PARAMETERS */
+        settings = {
+          db : "Resops_Data",
+          lay : "Document",
+          id : "",
+          key : "@UUID",
+          uuid : "",
+          container : "document",
+          filename : "fileName"
+        }
+      }
+
+    </script>
+</head>
+<body>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script>
+    function startSession(url){
+
+      let method = "POST";
+      let content = "application/json";
+
+      let api = "/databases/" + settings.db + "/sessions";
+      let path = "";
+
+      fetch(url + api + path, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": AUTH,
+        },
+        body: "",
+      })
+      .then(response => response.json())
+      .then(data => {
+
+        const TOKEN = data.response.token;
+//      console.log("startSession: " + token);
+
+        if( settings.id.length && settings.id!==null ){
+          getRecord(settings.id);
+        } else {
+          findRecord(settings.key,settings.uuid);
+        }
+      })
+      .catch(error => {
+        console.log("Error: ", error);
+      });
+    };
+
+    function downloadContainer (record){
+      let uri = record[settings.container];
+      let fileName = record[settings.filename];
+
+      downloadFileAs(uri, fileName);
+      endSession(HOST, TOKEN);
+    }
+
+    function findRecord(key, value) {
+
+      let method = "POST";
+      let content = "application/json";
+
+      let api = "/databases/" + settings.db + "/layouts/" + settings.lay + "/_find";
+      let path = "";
+
+      let query = {"query":[{[key]:value}],"limit":1,"offset":1};
+//      console.log(query);
+
+      fetch(url + api + path, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": "Bearer " + TOKEN,
+        },
+        body: JSON.stringify(query)
+      })
+      .then(response => response.json())
+      .then(data => {
+
+        downloadContainer(record,token);
+
+      })
+      .catch(error => {
+        console.log("Error: ", error);
+      });
+    };
+
+    function getRecord(id) {
+
+      let method = "GET";
+      let content = "application/json";
+
+      let api = "/databases/" + settings.db + "/layouts/" + settings.lay + "/records/";
+      let path = settings.id;
+
+      fetch(url + api + path, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": "Bearer " + TOKEN,
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+
+        downloadContainer(record);
+
+      })
+      .catch(error => {
+        console.log("Error: ", error);
+      });
+    };
+
+    function downloadFileAs(url, filename) {
+//      console.log("Downloading: " + filename);
+      if(filename==""){
+        alert("File Removed")
+      } else {
+        fetch(url)
+        // accept the file to binary data
+        .then((res) => res.blob())
+        // create a url from the binary data
+        .then((blob) => {
+
+          var link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          //  link.href = uri;
+          link.download = filename;
+
+          var btn = document.createElement("button");
+          //  btn.class = "btn";
+          btn.style = "width:100%;background-color: DodgerBlue;border: none;color: white;padding: 12px 30px;cursor: pointer;font-size: 20px;";
+          btn.innerHTML = "Download " + filename;
+          link.appendChild(btn);
+
+          //Firefox requires the link to be in the body
+          document.body.appendChild(link);
+
+
+          if (filename.search(".pdf")>0 || filename.search(".jpg")>0 || filename.search(".png")>0){
+            const iframe = document.createElement("iframe");
+            iframe.style = "position:fixed; top:80px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;";
+
+            iframe.src = url;
+            document.body.appendChild(iframe);
+
+          } else {
+            link.click();
+          }
+        });
+     }
+    }
+
+    function endSession(url, token) {
+
+      let method = "DELETE";
+      let content = "application/json";
+
+      let api = "/databases/" + settings.db + "/sessions/";
+      let path = TOKEN;
+
+      fetch(url + api + path, {
+        method: method,
+        headers: {
+          "Content-Type": content
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log("endSession: " + JSON.stringify(data));
+      })
+      .catch(error => {
+        console.log("Error: ", error);
+      });
+    }
+
+  </script>
+</body>
+</html>

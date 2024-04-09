@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" />
+  <title>Barcode</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <!--  https://github.com/lindell/JsBarcode/wiki/Options -->
+  <!-- <script src="https://unpkg.com/jsbarcode@latest/dist/JsBarcode.all.min.js"></script> 
+  *LabOrders -->
+  <script src="JsBarcode.all.min.js"></script>
+
+  <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
+  <script>
+    const API = "barcode";
+    document.title = API;
+
+    const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
+    const SCRIPT = URL_PARAMETERS.get("script");
+    const WEBVIEWER = URL_PARAMETERS.get("webviewer");
+
+    let intitialize = setInterval(() => {
+      if (window.FileMaker) {
+        clearInterval(intitialize);
+
+        let param = { 
+          method : API + ".initialize",
+          config : { webviewer : WEBVIEWER, callback : "initialize" },
+        };
+        FileMaker.PerformScriptWithOption(
+          SCRIPT,
+          JSON.stringify(param),
+          5
+        );
+      }
+    }, 100);
+
+    function isReady(){
+      // Call to test Perform Javascript in Web Viewer
+      return 1
+    }
+    
+  </script>
+</head>
+<body>
+  <img id="barcode" hidden></img>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script>
+    if ( URL_PARAMETERS.get("data") ){
+      createBarcode( URL_PARAMETERS.get("data") );
+      showBarcode(1);
+    }
+
+    function getBarcode (options){
+      createBarcode(options);
+      returnBarcode();
+    }
+
+    function createBarcode (options="{}"){
+      let data = JSON.parse(options);
+      JsBarcode("#barcode", data.text, data);
+    }
+
+    function returnBarcode () {
+      const img = document.getElementById(API).src.split(',')[1];
+
+      let param = {
+        method : API + ".img",
+        config : { webviewer : WEBVIEWER, callback : "" },
+        data : { img : img }
+      };
+
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
+    };
+
+    function show (show) {
+        if ( show == 1 ){
+          document.getElementById(API).hidden = false;
+        } else {
+          document.getElementById(API).hidden = true;
+        }
+    }
+
+  </script>
+</body>
+</html>

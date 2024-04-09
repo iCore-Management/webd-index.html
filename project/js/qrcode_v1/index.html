@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head><meta charset="UTF-8" />
+  <title>QR Code</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <!-- https://github.com/davidshimjs/qrcodejs 
+  LabAccess*, LabStorage* -->
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script> -->
+
+  <!-- https://github.com/ushelp/EasyQRCodeJS/tree/master -->
+  <script src="easy.qrcode.min.js"></script>
+
+  <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
+  <script>
+    const API = "qrcode";
+    document.title = API;
+
+    const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
+    const SCRIPT = URL_PARAMETERS.get("script");
+    const WEBVIEWER = URL_PARAMETERS.get("webviewer");
+
+    let init = setInterval(() => {
+      if (window.FileMaker) {
+        clearInterval(init);
+
+        let param = { 
+          method : API + ".initialize",
+          config : { webviewer : WEBVIEWER, callback : "" },
+        };
+        FileMaker.PerformScriptWithOption(
+          SCRIPT,
+          JSON.stringify(param),
+          5
+        );
+      }
+    }, 100);
+
+    function isReady(){
+      // Call to test Perform Javascript in Web Viewer
+      return 1
+    }
+
+  </script>
+</head>
+<body>
+  <div id="qrcode" hidden></div>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script>
+    let qrCode;
+    if ( URL_PARAMETERS.get("data") ){
+      let param = URL_PARAMETERS.get("data") ? URL_PARAMETERS.get("data") : "{}";
+//      let options = JSON.parse(param).text; // = URL_PARAMETERS.get("data")
+
+      createQRCode(param);
+      showQRCode(1);
+    }
+
+    function createQRCode(options){
+      if ( qrCode==null ) {
+        // Generate initial QR Code
+        qrCode = new QRCode("qrcode", JSON.parse(options));
+      } else {
+        // Update options for existing QR Code
+        qrCode.makeCode( JSON.parse(options).text );
+      }
+    }
+    function getQRCode(options){
+      createQRCode(options);
+      returnQRCode();
+    }
+/*
+    function createQRCode( options = "{}" ){
+      if ( qrCode==null ) {
+        // Generate initial QR Code
+        qrCode = new QRCode("qrcode", JSON.parse(options));
+      } else {
+        // Update options for existing QR Code
+        qrCode.makeCode( JSON.parse(options).text );
+      }
+    }
+*/
+    function returnQRCode(){
+      let base64 = setInterval(() => {
+        let img = document.getElementById(API).getElementsByTagName("canvas")[0].toDataURL().split(",")[1];
+        if (img) {
+          clearInterval(base64);
+
+          let param = {
+            method : API + ".img",
+            config : { webviewer : WEBVIEWER, callback : "" },
+            data : { img : img }
+          };
+
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    }
+
+    function clearQRCode(){
+      qrCode.clear();
+    }
+
+    function show( show ){
+      if ( show == 1 ){
+        document.getElementById(API).hidden = false;
+      } else {
+        document.getElementById(API).hidden = true;
+      }
+    }
+
+  </script>
+</body>
+</html>
