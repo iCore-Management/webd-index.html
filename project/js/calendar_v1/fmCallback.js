@@ -29,9 +29,9 @@ window[CALLBACK] = (results, fetchId) => {
 function PerformCallback(
   script,
   param = { method: "callback" },
-  config = { timeOut: 3000, scriptOption: 5 }
+  config = { timeOut: 30000, scriptOption: 5 }
 ) {
-  const fetchId = script + Date.now(); //GET A UUIDish
+  const fetchId = script + "_" + Date.now(); //GET A UUIDish
   __FETCH_RESULTS__[fetchId] = "PENDING";
 
   param.config.promise = fetchId;

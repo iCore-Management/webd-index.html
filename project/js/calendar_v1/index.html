@@ -57,12 +57,12 @@
 
   </script>
   <!-- Full Calendar -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
     <!-- BY PLUGIN -->
     <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/index.global.min.js"></script> -->
     <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.11/index.global.min.js"></script> -->
     <!-- PREMIUM -->
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.11/index.global.min.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.11/index.global.min.js"></script> -->
     <!-- <script src="fullcalendar.scheduler.min.js"></script> -->
 
   <!-- Recurrence Rule Library -->
@@ -90,8 +90,10 @@
 <body>
 
   <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script src="./Calendar.js"></script>
   <script src="./Events.js"></script>
   <script src="./fmCallback.js"></script>
+  <script src="./isValidEvent.js"></script>
   <script type="text/javascript">
     document.body.prepend(
       Object.assign(document.createElement("div"), {
@@ -113,73 +115,360 @@
     const SETTINGS = {}; //SETTINGS.eventFields
     var calendar;
 
-    function createCalendar(settings) {
-//      settings = settings ? settings : "{}";
-//          console.log(settings);
-      // ERROR CHECK: settings is object
-      const { Options, Settings } = JSON.parse(settings ? settings : "{}");
-//      SETTINGS.USER = User;
-//      SETTINGS.CALENDAR = Settings;
-//      SETTINGS.SOURCES = Sources;
-//      SETTINGS.FIELDS = Fields;
-      SETTINGS.user = Settings.user;
-      SETTINGS.eventSources = Settings.eventSources;
-      SETTINGS.event = Settings.event;
+/*
+      let validDay = -90; //valid start, valid end
+      let startDay = -40; //-14
+      let endDay = 60;
 
-      calendar = new FullCalendar.Calendar(document.getElementById(API),
-        Object.assign(Options, {
-          schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
-          eventSources: 
-            // ERROR CHECK: SETTINGS.SOURCES.SETTINGS is array
+      let closeDay = -40; //source settings
+      let openDay = 30; //source Setting
+
+      let today = new Date();
+
+      let validDate = new Date();
+      validDate.setDate(today.getDate()+validDay);
+      let startDate = new Date();
+      startDate.setDate(today.getDate()+startDay);
+
+      let closeDate, openDate; // selectConstraint = {};
+      if ( closeDay != null ) {
+        closeDate = new Date();
+        closeDate.setDate(today.getDate()+closeDay);
+        let start = new Date(Math.max.apply(null, [validDay, startDay, closeDay]));
+//        selectConstraint = {...selectConstraint, start: start.toISOString() };
+      }
+      if ( openDay != null ) {
+        openDate = new Date();
+        openDate.setDate(today.getDate()+openDay);
+        let end = new Date(Math.max.apply(null, [validDay, startDay, closeDay]));
+//        selectConstraint = {...selectConstraint, end: openDate.toISOString() };
+      }
+*/
+//      let twoweeks = new Date(Date().setDate(today.getDate()-21) );
+//      console.log(Date());
+//      console.log(Date.toISOString());
+//      console.log(Date.now());
+//      console.log(today.toISOString());
+//      console.log(closeDate.toISOString());
+
+
+
+    function createCalendar(settings="{}") {
+
+      const { Options, Settings } = JSON.parse(settings);
+
+      //SET CALENDAR USER ACCESS
+      let extendedHours = Settings.calendar?.extendedHours ? Settings.calendar.extendedHours : [];
+      let access = extendedHours.includes(Settings.user?.id) ? "extendedHours" : "user";
+      let admins = Settings.calendar?.admins ? Settings.calendar.admins : [];
+      Settings.user = {...Settings.user, access : admins.includes(Settings.user.id) ? "admin" : access };
+      //UPDATE CALENDAR BUSINESSHOURS BY ACCESS
+      if ( Settings.user.access != "user" ) {
+        Options.businessHours = false;
+      } else {
+        //TESTING: GET FROM OPTIONS
+        Options.businessHours = true;
+      }
+      
+      // CONVERT DATES
+      let today = new Date();
+      //USED FOR SELECTION OUTSIDE SOURCE
+      //USE Options.eventConstraint? (no end for user = admin or person = extendedHours)
+      Settings.calendar.start = Settings.calendar.start ? new Date(new Date(today).setDate(today.getDate() + (Settings.calendar.start) )) : null;
+      Settings.calendar.end = Settings.calendar.end ? new Date(new Date(today).setDate(today.getDate() + (Settings.calendar.end) )) : null;
+
+      //USE Options.eventSources[].constraint?
+      Settings.calendar.open = Settings.calendar.open ? new Date(new Date(today).setDate(today.getDate() + (Settings.calendar.open) )) : null;
+      Settings.calendar.close = Settings.calendar.close ? new Date(new Date(today).setDate(today.getDate() + (Settings.calendar.close) )) : null;
+      // GET CALENDAR VALID RANGE
+      if ( Options.validRange ) {
+        Options.validRange = {
+          start : getDate(Options.validRange.start), //Options.validRange.start ? new Date(Options.validRange.start) : null,
+          end : getDate(Options.validRange.end), //Options.validRange.end ? new Date(Options.validRange.end) : null,
+        }
+      }
+      // GET AVAILABLE RANGE BY ACCESS
+      // ALWAYS INCLUDE THE MINIMUM start
+//      Options.selectConstraint = { start: Settings.calendar.start };
+      //SET TO NULL, THEN BUSIENSSHOURS FOR USERS
+      // DOESN'T SEEM TO TAKE AN ARRAY, DOES BUSINESSHOURS ??
+      Settings.calendar.constraint = { start: Settings.calendar.start };
+      if (Settings.user.access == "user"){
+        //CHECK OPEN AND CLOSE DATES (BY SOURCE ???)
+        after = new Date(Math.max.apply(null, [Settings.calendar.start, Settings.calendar.close]));
+        let beforeArray = [Settings.calendar.end, Settings.calendar.open];
+        before = new Date(Math.min.apply(null, beforeArray.filter(Boolean)));
+
+//        Options.selectConstraint = { start: after, end: before, };
+        Settings.calendar.constraint = { start: after, end: before, };
+      }
+      //TESTING: GET FROM OPTIONS (BY SOURCE ???)
+      Settings.calendar.maxUsers = 1;
+      Settings.calendar.userHours = 3;
+      Settings.calendar.minTime = 30;
+      Settings.calendar.maxTime = 180;
+
+
+      // SET GLOBALS
+      SETTINGS.USER = Settings.user;
+      SETTINGS.calendar = Settings.calendar;
+      SETTINGS.event = Settings.event;
+      SETTINGS.eventSources = Options.eventSources;
+      SETTINGS.FIELDS = [];
+//      console.log(Options.eventSources);
+//      console.log(SETTINGS.eventSources);
+//      const { calendar: CALENDAR, user: USER } = Settings;
+
+
+
+
+      // PROVIDES CALENDAR MIN MAX SELECTION SPACE
+      // DETERMINES WHERE NEW EVENTS CAN BE MADE (start, end)
+      if ( Options.eventConstraint ) {
+        Options.eventConstraint = {
+          start : getDate(Options.eventConstraint.start), //Options.eventConstraint.start ? new Date(Options.eventConstraint.start) : null,
+          end : getDate(Options.eventConstraint.end), //Options.eventConstraint.end ? new Date(Options.eventConstraint.end) : null,
+        }
+      }
+//      SETTINGS.eventSources = Settings.eventSources; // SET IN OPTIONS
+
+      //TESTING
+      //PROVIDES CALENDAR, SOURCE, EVENT CONSTRAINTS (USER,status LIMITED) (close,open)
+      //DETERMINES WHERE AN EVENT CAN GO BY CALENDAR (=selectConstraint), SOURCE(apply by userAccess, check businessHours), EVENT(apply by status)
+//      SETTINGS.eventSources[0].constraint = Options.eventConstraint;
+    
+      let businessHours = [
+        { // days of week. an array of zero-based day of week integers (0=Sunday)
+          daysOfWeek: [1, 2, 3, 4], // Monday - Thursday
+
+          startTime: '10:00', // a start time (10am in this example)
+          endTime: '18:00', // an end time (6pm in this example)
+        },
+      ]
+//      console.log(businessHours);
+//      console.log(Options.selectConstraint);
+//      console.log(Options.eventConstraint);
+//      SETTINGS.SOURCES = Options.eventSources;
+      // selectConstraint is set at the calendar level, not per source
+      // ASSUME 1 SOURCE? OR RUN verifyEvent on select and dateClick
+
+
+
+      
+/*
+//	[ "Settings.user"; "3BF185A4-BDAF-448D-B119-EC5A8AE49648"; JSONString]; //USE PERSON KEY OF CURRENT USER //ADMIN
+	[ "Settings.user"; "52765E6A-8FA7-C549-A8CB-67548B5A8DEA"; JSONString]; //USE PERSON KEY OF CURRENT USER //USER
+
+	[ "Options.themeSystem"; "bootstrap5"; JSONString ];
+	[ "Options.initialView"; "dayGridMonth"; JSONString ];
+	[ "Options.initialDate"; Let ( ~date = Case ( not IsEmpty ( $$_initialDate ); $$_initialDate; "3/2/2024" );
+			Right ( "0000" & Year ( ~date ) ; 4 ) & "-" & Right ( "00" & Month ( ~date ); 2 ) & "-" & Right ( "00" & Day ( ~date ); 2 )
+		); JSONString ];
+	[ "Options.headerToolbar"; "{\"left\":\"today prev,next\",\"center\":\"title\",\"right\":\"dayGridMonth,timeGridWeek,timelineDay\"}"; JSONObject ];
+	[ "Options.allDaySlot"; True; JSONBoolean ];
+	[ "Options.nowIndicator"; True; JSONBoolean ];
+//	[ "Options.businessHours"; True; JSONBoolean ];
+
+	[ "Options.navLinks"; True; JSONBoolean ];
+	[ "Options.navLinkDayClick"; "timeGridDay"; JSONString ];
+
+	[ "Options.editable"; True; JSONBoolean ];
+//          eventDurationEditable"; true,
+	[ "Options.eventResizableFromStart"; True; JSONBoolean ];
+//          eventStartEditable"; true,
+	[ "Options.snapDuration"; "00:15"; JSONString ];
+
+	[ "Options.selectable"; True; JSONBoolean ];
+	[ "Options.selectMirror"; True; JSONBoolean ];
+	[ "Options.selectMinDistance"; 5; JSONNumber ];
+*/
+let index = 0;
+      calendar = new FullCalendar.Calendar(document.getElementById(API), {
+//        Object.assign(Options, {
+//        schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
+
+        /* Toolbar: https://fullcalendar.io/docs/toolbar */
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+
+        /* Theme https://fullcalendar.io/docs/theming */
+        themeSystem: "bootstrap5",
+
+        /* TimeGrid View https://fullcalendar.io/docs/timegrid-view */
+        allDaySlot: false,
+
+        /* View API https://fullcalendar.io/docs/view-api */
+        initialView: "timeGridWeek",
+//        viewDidMount(arg) => viewDidMount(arg,)
+
+        /* Date Navigation https://fullcalendar.io/docs/date-navigation */
+        initialDate: "2024-04-18",
+        validRange: Options.validRange, // not before close or after open? []
+
+        /* Date Nav Links https://fullcalendar.io/docs/date-nav-links */
+        navLinks: true, // can click day/week names to navigate views
+        navLinkDayClick: "timeGridDay",
+
+        /* DATE CLICKING AND SELECTING https://fullcalendar.io/docs/date-clicking-selecting */
+        selectable: true,
+        selectMirror: true,
+        unselectAuto: true,
+
+
+        selectOverlap:(event) => selectOverlap(event),
+        selectConstraint: null, // CAN SELECT ANYWHERE, set to BusinessHours later for users
+//        selectConstraint: selectConstraint(), //CALENDAR NOT SET YET
+        selectAllow:(selectionInfo) => selectAllow(selectionInfo),
+        selectMinDistance: 5,
+
+        dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
+        select: (selectionInfo) => select(selectionInfo), //NEW EVENT
+
+        /* Now Indicator https://fullcalendar.io/docs/now-indicator */
+        nowIndicator: true,
+
+        /* Business Hours https://fullcalendar.io/docs/business-hours */
+        businessHours: Options.businessHours, // display business hours
+
+        /* Event Model https://fullcalendar.io/docs/event-model */
+//        eventAdd: (changeInfo) => eventChange(changeInfo), //https://fullcalendar.io/docs/eventAdd
+        eventChange: (changeInfo) => eventChange(changeInfo),
+        eventRemove: (removeInfo) => eventRemove(removeInfo),
+
+
+        /* Event Sources https://fullcalendar.io/docs/event-source 
+//        events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index }, successCallback, failureCallback),
+//        eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+//        eventDataTransform: (eventData) => eventDataTransform(eventData, index),
+
+            These are all applied on the event additively:
+            Calendar eventConstraint
+            Source constraint
+            Event constraint
+
+            constraint = '' can't be dragged anywhere...
+            no constraint means can be dragged anywhere... still observes eventConstraint
+            constraint = "businessHours" still observes eventConstraint
+            constraint = groupId, businessHours, object
+*/
+
+/* 
+        eventSources: 
+            // ERROR CHECK: Options.eventSources is array /*
             Options.eventSources.map((object, index) => ({
               ...object,
-//              id : SETTINGS.eventSources[index].id,
-              events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index, source: object.id }, successCallback, failureCallback),
+              events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index }, successCallback, failureCallback),
+              success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+              eventDataTransform: (eventData) => eventDataTransform(eventData, index),
+              constraint: "businessHours",
             })),
+*/
 
-/*          businessHours: {
-            start: "2024-03-10T00:00:0", end: "2024-4-10T00:00:0",
-            startTime: '10:00', // a start time (10am in this example)
-            endTime: '18:00', // an end time (6pm in this example)
+        eventSources : [{
+          id : "493F6ABB-76CE-4A1C-BE7F-FC2237453997",
+          events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index }, successCallback, failureCallback),
+          success: (rawEvents, response) => eventSourceSuccess(rawEvents, response, index),
+          eventDataTransform: (eventData) => eventDataTransform(eventData, index),
+//          constraint: (index) => sourceConstraint(index),
+        }],
 
-            daysOfWeek: [1, 2, 3, 4]
-            // days of week. an array of zero-based day of week integers (0=Sunday)
-            // (Monday-Thursday in this example)
-          },
-  */        
-//          eventConstraint: "businessHours",
-          eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
-          eventDataTransform: (eventData) => eventDataTransform(eventData),
+/*
+        eventSources : [{
+          constraint : "availableForMeeting",
+          events: [
+            {
+              title: 'Business Lunch',
+              start: '2024-03-03T13:00:00',
+              constraint: 'businessHours'
+            },
+            {
+              id: "1",
+              title: 'Meeting',
+              start: '2024-03-13T11:00:00',
+              end: '2024-03-13T12:00:00',
+              constraint: 'businessHours', // defined below
+              color: '#257e4a'
+            },
+            {
+              title: 'Conference',
+              start: '2024-03-18',
+              end: '2024-03-20'
+            },
+            {
+              title: 'Party',
+              start: '2024-03-29T20:00:00'
+            },
+
+            // areas where "Meeting" must be dropped
+            {
+              groupId: 'availableForMeeting',
+              start: '2024-03-11T10:00:00',
+              end: '2024-03-11T16:00:00',
+              display: 'background'
+            },
+            {
+              groupId: 'availableForMeeting',
+              start: '2024-03-13T10:00:00',
+              end: '2024-03-13T20:00:00',
+              display: 'background'
+            },
+
+            // red areas where no events can be dropped
+            {
+              start: '2024-03-24',
+              end: '2024-03-28',
+              overlap: false,
+              display: 'background',
+              color: '#ff9f89'
+            },
+            {
+              start: '2024-03-06',
+              end: '2024-03-08',
+              overlap: false,
+              display: 'background',
+              color: '#ff9f89'
+            }
+          ],
+          }],
+*/
+
+          /* EVENT DISPLAY https://fullcalendar.io/docs/event-display */
+//          eventContent: (arg) => eventContent(arg),
           eventDidMount: (arg) => eventDidMount(arg),
 
-          select: (selectionInfo) => select(selectionInfo), //NEW EVENT
-//          selectConstraint: "businessHours",
-//          selectAllow: => not before close or after open
-          dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
+        /* EVENT CLICKING AND HOVERING https://fullcalendar.io/docs/event-clicking-hovering */
+        eventClick: (eventClickInfo) => {
+          eventClickInfo.jsEvent.preventDefault(); // don't let the browser navigate
+          if (eventClickInfo.event.url) {
+            window.open(eventClickInfo.event.url);
+          } else {
+            eventClick(eventClickInfo);
+          }
+        },
 
-//          eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent),
-          //          eventConstraint: "2",
-          eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent),
-          //          eventDrop: "f ONCE UPDATE STOPS",
-          eventChange: (changeInfo) => eventChange(changeInfo),
-          eventRemove: (removeInfo) => eventRemove(removeInfo),
+        /* Event Dragging and Resizing https://fullcalendar.io/docs/event-dragging-resizing */
+        editable: true,
+        eventResizableFromStart: true,
+        snapDuration: "00:15",
+        dragScroll: true,
+        /* EVENT CONTROLS */
+        eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent), //RETURN BOOLEAN
+        eventConstraint: Settings.calendar.constraint,
+        eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent), //RETURN BOOLEAN
+        /* EVENT CALLBACKS */
+        //        eventDragStart: (changeInfo) => eventDragStart(changeInfo), //https://fullcalendar.io/docs/eventDragStart
+        //        eventDragStop: (changeInfo) => eventDragStop(changeInfo), //https://fullcalendar.io/docs/eventDragStop
+        //        eventDrop: (eventDropInfo) => eventDrop(eventDropInfo), //https://fullcalendar.io/docs/eventDrop
 
-          eventClick: (eventClickInfo) => {
-            eventClickInfo.jsEvent.preventDefault(); // don't let the browser navigate
-            if (eventClickInfo.event.url) {
-              window.open(eventClickInfo.event.url);
-            } else {
-              eventClick(eventClickInfo);
-            }
-          },
-          //          eventContent: (arg) => eventContent(arg, factory),
-        })
-      );
 
-//      calendar.getEventSources()[0].id = SETTINGS.SOURCES.SETTINGS[0].id;
+//    })
+    });
+      calendar.setOption("selectConstraint", selectConstraint());
       show(true);
       calendar.render();
-//      window.calendar = calendar;
     };
     function show(show) {
       document.getElementById(API).hidden = !show;
@@ -259,7 +548,7 @@
         eventOverlap: https://fullcalendar.io/docs/eventOverlap (function)
         eventConstraint: https://fullcalendar.io/docs/eventConstraint
     *    eventAllow: https://fullcalendar.io/docs/eventAllow (function)
-        eventDrop: https://fullcalendar.io/docs/eventDrop
+        eventDrop: https://fullcalendar.io/docs/eventDrop (function)
       BusinessHours: https://fullcalendar.io/docs/business-hours
       Background Events: https://fullcalendar.io/docs/background-events
     

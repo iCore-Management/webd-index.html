@@ -1,22 +1,24 @@
 <!DOCTYPE html>
 <html lang="en-us">
-<head><meta charset="UTF-8" />
-  <title>QR Code</title>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>QRCode</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-  <!-- https://github.com/davidshimjs/qrcodejs 
-  LabAccess*, LabStorage* -->
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script> -->
-
-  <!-- https://github.com/ushelp/EasyQRCodeJS/tree/master -->
-  <script src="easy.qrcode.min.js"></script>
-
-  <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
-  <script>
-    const API = "qrcode";
-    document.title = API;
+  <script type="text/javascript">
+    /**
+     * 
+     * Generate QR Codes in Javascript
+     * https://github.com/ushelp/EasyQRCodeJS
+     * 
+     * Notes: 
+     *  Options noted below
+     *  LabAccess, LabStorage
+     */
+    const API = document.title;
 
     const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
     const SCRIPT = URL_PARAMETERS.get("script");
@@ -26,9 +28,9 @@
       if (window.FileMaker) {
         clearInterval(init);
 
-        let param = { 
-          method : API + ".initialize",
-          config : { webviewer : WEBVIEWER, callback : "" },
+        let param = {
+          method: API + ".initialize",
+          config: { webviewer: WEBVIEWER, function: "initialize" },
         };
         FileMaker.PerformScriptWithOption(
           SCRIPT,
@@ -38,61 +40,82 @@
       }
     }, 100);
 
-    function isReady(){
+    function activate(callback = "") {
+      /** 
+       * Call to test Perform Javascript in Web Viewer
+       * Method is what method will run in FileMaker if isActive 
+       */
+      let param = {
+        method: API + ".initialize",
+        config: { webviewer: WEBVIEWER, function: callback },
+        data: { active: true, },
+      };
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
+      return true;
+    };
+
+    /* DEPRICATE */
+    function isReady() {
       // Call to test Perform Javascript in Web Viewer
       return 1
-    }
-
+    };
   </script>
+  <!-- Easy QRCode -->
+  <!-- <script src="https://unpkg.com/jsbarcode@latest/dist/JsBarcode.all.min.js"></script> -->
+  <script src="easy.qrcode.min.js"></script>
 </head>
+
 <body>
-  <div id="qrcode" hidden></div>
 
   <!-- API FUNCTIONS FOR FILEMAKER -->
-  <script>
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement("div"), {
+        id: API, className: "container-fluid mt-1", hidden: true
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    if (URL_PARAMETERS.get("data")) {
+      //      let param = URL_PARAMETERS.get("data"); // ? URL_PARAMETERS.get("data") : "{}";
+      //      let options = JSON.parse(param).text; // = URL_PARAMETERS.get("data")
+      initialize(URL_PARAMETERS.get("data"));
+      show(true);
+    };
+    function initialize(options) {
+      createCode(options);
+    };
+
     let qrCode;
-    if ( URL_PARAMETERS.get("data") ){
-      let param = URL_PARAMETERS.get("data") ? URL_PARAMETERS.get("data") : "{}";
-//      let options = JSON.parse(param).text; // = URL_PARAMETERS.get("data")
-
-      createQRCode(param);
-      showQRCode(1);
-    }
-
-    function createQRCode(options){
-      if ( qrCode==null ) {
+    function getCode(options) {
+      createCode(options);
+      returnCode();
+    };
+    function createCode(options = {}) {
+      if (qrCode == null) {
         // Generate initial QR Code
-        qrCode = new QRCode("qrcode", JSON.parse(options));
+        qrCode = new QRCode(API, JSON.parse(options));
       } else {
         // Update options for existing QR Code
-        qrCode.makeCode( JSON.parse(options).text );
+        qrCode.makeCode(JSON.parse(options).text);
       }
-    }
-    function getQRCode(options){
-      createQRCode(options);
-      returnQRCode();
-    }
-/*
-    function createQRCode( options = "{}" ){
-      if ( qrCode==null ) {
-        // Generate initial QR Code
-        qrCode = new QRCode("qrcode", JSON.parse(options));
-      } else {
-        // Update options for existing QR Code
-        qrCode.makeCode( JSON.parse(options).text );
-      }
-    }
-*/
-    function returnQRCode(){
-      let base64 = setInterval(() => {
-        let img = document.getElementById(API).getElementsByTagName("canvas")[0].toDataURL().split(",")[1];
-        if (img) {
-          clearInterval(base64);
+    };
+    function returnCode() {
+      let result = setInterval(() => {
+        let base64 = document.getElementById(API).getElementsByTagName("canvas")[0].toDataURL().split(",")[1];
+        if (base64) {
+          clearInterval(result);
 
           let param = {
-            method : API + ".img",
-            config : { webviewer : WEBVIEWER, callback : "" },
-            data : { img : img }
+            method: API + ".base64",
+            config: { webviewer: WEBVIEWER, funtion: "" },
+            data: { base64: base64 }
           };
 
           FileMaker.PerformScriptWithOption(
@@ -102,20 +125,140 @@
           );
         }
       }, 100);
-    }
-
-    function clearQRCode(){
+    };
+    function clearCode() {
       qrCode.clear();
-    }
+    };
 
-    function show( show ){
-      if ( show == 1 ){
-        document.getElementById(API).hidden = false;
-      } else {
-        document.getElementById(API).hidden = true;
-      }
-    }
+    const options = {
+      // ====== Basic
+      text: "https://github.com/ushelp/EasyQRCodeJS",
+      width: 256,
+      height: 256,
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H, // L, M, Q, H
+
+      // ====== dotScale
+      /*
+      dotScale: 1, // For body block, must be greater than 0, less than or equal to 1. default is 1
+      
+      dotScaleTiming: 1, // Dafault for timing block , must be greater than 0, less than or equal to 1. default is 1
+      dotScaleTiming_H: undefined, // For horizontal timing block, must be greater than 0, less than or equal to 1. default is 1
+      dotScaleTiming_V: undefined, // For vertical timing block, must be greater than 0, less than or equal to 1. default is 1
+      
+      dotScaleA: 1, // Dafault for alignment block, must be greater than 0, less than or equal to 1. default is 1
+      dotScaleAO: undefined, // For alignment outer block, must be greater than 0, less than or equal to 1. default is 1
+      dotScaleAI: undefined, // For alignment inner block, must be greater than 0, less than or equal to 1. default is 1
+      */
+
+      // ====== Quiet Zone
+      /*
+      quietZone: 0,
+      quietZoneColor: "rgba(0,0,0,0)",
+      */
+
+      // ====== Logo
+      /*
+      logo: "../demo/logo.png", // Relative address, relative to `easy.qrcode.min.js`
+      logo: "http://127.0.0.1:8020/easy-qrcodejs/demo/logo.png", 
+      logoWidth: 80, // fixed logo width. default is `width/3.5`
+      logoHeight: 80, // fixed logo height. default is `heigth/3.5`
+      logoMaxWidth: undefined, // Maximum logo width. if set will ignore `logoWidth` value
+      logoMaxHeight: undefined, // Maximum logo height. if set will ignore `logoHeight` value
+      logoBackgroundColor: '#fffff', // Logo backgroud color, Invalid when `logBgTransparent` is true; default is '#ffffff'
+      logoBackgroundTransparent: false, // Whether use transparent image, default is false
+      */
+
+      // ====== Backgroud Image
+      /*
+      backgroundImage: '', // Background Image
+      backgroundImageAlpha: 1, // Background image transparency, value between 0 and 1. default is 1. 
+      autoColor: false, // Automatic color adjustment(for data block)
+      autoColorDark: "rgba(0, 0, 0, .6)", // Automatic color: dark CSS color
+      autoColorLight: "rgba(255, 255, 255, .7)", // Automatic color: light CSS color
+      */
+
+      // ====== Colorful
+      // === Position Pattern(Eye) Color
+      /*
+      PO: '#e1622f', // Global Position Outer color. if not set, the defaut is `colorDark`
+      PI: '#aa5b71', // Global Position Inner color. if not set, the defaut is `colorDark`
+      PO_TL:'', // Position Outer color - Top Left 
+      PI_TL:'', // Position Inner color - Top Left 
+      PO_TR:'', // Position Outer color - Top Right 
+      PI_TR:'', // Position Inner color - Top Right 
+      PO_BL:'', // Position Outer color - Bottom Left 
+      PI_BL:'', // Position Inner color - Bottom Left 
+      */
+      // === Alignment Color
+      /*
+      AO: '', // Alignment Outer. if not set, the defaut is `colorDark`
+      AI: '', // Alignment Inner. if not set, the defaut is `colorDark`
+      */
+      // === Timing Pattern Color
+      /*
+      timing: '#e1622f', // Global Timing color. if not set, the defaut is `colorDark`
+      timing_H: '', // Horizontal timing color
+      timing_V: '', // Vertical timing color
+      */
+
+      // ====== Title
+      /*
+      title: 'QR Title', // content 
+      titleFont: "normal normal bold 18px Arial", //font. default is "bold 16px Arial"
+      titleColor: "#004284", // color. default is "#000"
+      titleBackgroundColor: "#fff", // background color. default is "#fff"
+      titleHeight: 70, // height, including subTitle. default is 0
+      titleTop: 25, // draws y coordinates. default is 30
+      */
+
+      // ====== SubTitle
+      /*
+      subTitle: 'QR subTitle', // content
+      subTitleFont: "normal normal normal 14px Arial", // font. default is "14px Arial"
+      subTitleColor: "#004284", // color. default is "4F4F4F"
+      subTitleTop: 40, // draws y coordinates. default is 0
+      */
+
+      // ===== Event Handler
+      /*
+      onRenderingStart: undefined,
+      onRenderingEnd: undefined,
+      */
+
+      // ===== Versions
+      /*
+      version: 0, // The symbol versions of QR Code range from Version 1 to Version 40. default 0 means automatically choose the closest version based on the text length.
+      */
+
+      // ===== Binary(hex) data mode
+      /*
+      binary: false, // Whether it is binary mode, default is text mode. 
+      */
+
+      // ===== Tooltip
+      /*
+      tooltip: false, // Whether set the QRCode Text as the title attribute value of the QRCode div
+      */
+
+      // ==== CORS
+      /*
+      crossOrigin: null, // String which specifies the CORS setting to use when retrieving the image. null means that the crossOrigin attribute is not set.
+      */
+
+      // =====  Drawing method
+      /*
+      drawer: 'canvas', // Which drawing method to use. 'canvas', 'svg'. default is 'canvas'
+      */
+
+      // =====  UTF-8 without BOM
+      /*
+      utf8WithoutBOM: true
+      */
+    };
 
   </script>
 </body>
+
 </html>

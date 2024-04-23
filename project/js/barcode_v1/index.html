@@ -1,32 +1,36 @@
 <!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8" />
+<html lang="en-us">
+
+<head>
+  <meta charset="UTF-8" />
   <title>Barcode</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-  <!--  https://github.com/lindell/JsBarcode/wiki/Options -->
-  <!-- <script src="https://unpkg.com/jsbarcode@latest/dist/JsBarcode.all.min.js"></script> 
-  *LabOrders -->
-  <script src="JsBarcode.all.min.js"></script>
-
-  <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
-  <script>
-    const API = "barcode";
-    document.title = API;
+  <script type="text/javascript">
+    /**
+     * 
+     * Generate Barcodes in Javascript
+     * https://github.com/lindell/JsBarcode/wiki/Options
+     * 
+     * Notes: 
+     *  Options listed below
+     *  LabOrders
+     */
+    const API = document.title;
 
     const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
     const SCRIPT = URL_PARAMETERS.get("script");
     const WEBVIEWER = URL_PARAMETERS.get("webviewer");
 
-    let intitialize = setInterval(() => {
+    let init = setInterval(() => {
       if (window.FileMaker) {
-        clearInterval(intitialize);
+        clearInterval(init);
 
-        let param = { 
-          method : API + ".initialize",
-          config : { webviewer : WEBVIEWER, callback : "initialize" },
+        let param = {
+          method: API + ".initialize",
+          config: { webviewer: WEBVIEWER, function: "initialize" },
         };
         FileMaker.PerformScriptWithOption(
           SCRIPT,
@@ -36,57 +40,109 @@
       }
     }, 100);
 
-    function isReady(){
-      // Call to test Perform Javascript in Web Viewer
-      return 1
-    }
-    
-  </script>
-</head>
-<body>
-  <img id="barcode" hidden></img>
-
-  <!-- API FUNCTIONS FOR FILEMAKER -->
-  <script>
-    if ( URL_PARAMETERS.get("data") ){
-      createBarcode( URL_PARAMETERS.get("data") );
-      showBarcode(1);
-    }
-
-    function getBarcode (options){
-      createBarcode(options);
-      returnBarcode();
-    }
-
-    function createBarcode (options="{}"){
-      let data = JSON.parse(options);
-      JsBarcode("#barcode", data.text, data);
-    }
-
-    function returnBarcode () {
-      const img = document.getElementById(API).src.split(',')[1];
-
+    function activate(callback = "") {
+      /** 
+       * Call to test Perform Javascript in Web Viewer
+       * Method is what method will run in FileMaker if isActive 
+       */
+      console.log("ACTIVATE");
       let param = {
-        method : API + ".img",
-        config : { webviewer : WEBVIEWER, callback : "" },
-        data : { img : img }
+        method: API + ".initialize",
+        config: { webviewer: WEBVIEWER, function: callback },
+        data: { active: true, },
       };
-
       FileMaker.PerformScriptWithOption(
         SCRIPT,
         JSON.stringify(param),
         5
       );
+      return true;
     };
 
-    function show (show) {
-        if ( show == 1 ){
-          document.getElementById(API).hidden = false;
-        } else {
-          document.getElementById(API).hidden = true;
-        }
-    }
+    /* DEPRICATE */
+    function isReady() {
+      // Call to test Perform Javascript in Web Viewer
+      return 1
+    };
+  </script>
+  <!-- JSBarcode -->
+  <!-- <script src="https://unpkg.com/jsbarcode@latest/dist/JsBarcode.all.min.js"></script> -->
+  <script src="JsBarcode.all.min.js"></script>
+</head>
 
+<body>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement("img"), {
+        id: API, className: "container-fluid mt-1", hidden: true
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    if (URL_PARAMETERS.get("data")) {
+      initialize(URL_PARAMETERS.get("data"));
+      show(true);
+    };
+    function initialize(options) {
+      createCode(options);
+    };
+
+    function getCode(options) {
+      createCode(options);
+      returnCode();
+    };
+    function createCode(options = "{}") {
+      let data = JSON.parse(options);
+      JsBarcode("#"+API, data.text, data);
+    };
+    function returnCode() {
+//      let result = setInterval(() => {
+        let base64 = document.getElementById(API).src.split(',')[1];
+        if (base64) {
+//          clearInterval(result);
+          let param = {
+            method: API + ".base64",
+            config: { webviewer: WEBVIEWER, function: "" },
+            data: { base64: base64 }
+          };
+
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+//      }, 100);
+    };
+
+  /*
+  Option	        Default value	            Type
+  format	        "auto" (CODE128)	        String
+  width	          2	                        Number
+  height	        100	                      Number
+  displayValue	  true	                    Boolean
+  text	          undefined	                String
+  fontOptions	    ""	                      String
+  font	          "monospace"	              String
+  textAlign	      "center"	                String
+  textPosition	  "bottom"	                String
+  textMargin	    2	                        Number
+  fontSize	      20	                      Number
+  background	    "#ffffff"	                String (CSS color)
+  lineColor	      "#000000"	                String (CSS color)
+  margin	        10	                      Number
+  marginTop	      undefined	                Number
+  marginBottom	  undefined	                Number
+  marginLeft	    undefined	                Number
+  marginRight	    undefined	                Number
+  flat	          false	                    Boolean
+  valid	          function(valid){}	        Function
+  */
   </script>
 </body>
+
 </html>
