@@ -28,14 +28,14 @@ window[CALLBACK] = (results, fetchId) => {
 
 function PerformCallback(
   script,
-  param = { method: API + ".call" },
-  config = { timeOut: 30000, scriptOption: 5 }
+  param = { method: "callback" },
+  config = { timeOut: 3000, scriptOption: 5 }
 ) {
   const fetchId = script + Date.now(); //GET A UUIDish
   __FETCH_RESULTS__[fetchId] = "PENDING";
 
   param.config.promise = fetchId;
-  param.config.callback = CALLBACK;
+  param.config.function = CALLBACK;
 
   FileMaker.PerformScriptWithOption(
     script,
@@ -48,17 +48,15 @@ function PerformCallback(
 
     let int = setInterval(() => {
       result = __FETCH_RESULTS__[fetchId];
-      //    alert(JSON.stringify(result));
       if (result !== "PENDING") {
         clearInterval(int);
         delete __FETCH_RESULTS__[fetchId];
         resolve(result);
-        //        alert('yes'+JSON.stringify(result));
       }
       if (timeOut) {
         clearInterval(int);
         delete __FETCH_RESULTS__[fetchId];
-        reject(new Error("timeout"));
+        reject(new Error("fmCallback timeout at " + timeOut/1000 + "s"));
       }
     }, 100);
 

@@ -6,31 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-  <!--  https://fullcalendar.io/docs 
-  LabAccess, LabTime, LabSupport -->
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
-  <!-- BY PLUGIN -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/index.global.min.js"></script> -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.11/index.global.min.js"></script> -->
-  <!-- PREMIUM -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.11/index.global.min.js"></script> -->
-  <!-- <script src="fullcalendar/dist/index.global.min.js"></script> -->
-
-  <!-- rrule lib -->
-  <script src="https://cdn.jsdelivr.net/npm/rrule@2.6.4/dist/es5/rrule.min.js"></script>
-  <!-- the rrule-to-fullcalendar connector. must go AFTER the rrule lib -->
-  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/rrule@6.1.11/index.global.min.js"></script>
-
-  <!--  BOOTSTRAP 5 Theme -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
-
-
-
-  <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
-  <script>
-    const API = "calendar";
-    document.title = API;
+  <script type="text/javascript">
+    /**
+     * 
+     * Manage a Calendar in Javascript
+     * https://fullcalendar.io/docs 
+     * 
+     * Notes: 
+     *  LabAccess, LabTime, LabSupport
+     */
+    const API = document.title;
 
     const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
     const SCRIPT = URL_PARAMETERS.get("script");
@@ -40,9 +25,9 @@
       if (window.FileMaker) {
         clearInterval(init);
 
-        let param = { 
-          method : API + ".initialize",
-          config : { webviewer : WEBVIEWER, callback : "initialize" },
+        let param = {
+          method: API + ".initialize",
+          config: { webviewer: WEBVIEWER, function: "initialize" },
         };
         FileMaker.PerformScriptWithOption(
           SCRIPT,
@@ -52,267 +37,338 @@
       }
     }, 100);
 
-    function isReady(){
-      // Call to test Perform Javascript in Web Viewer
-      return 1
-    }
+    function activate(callback = "") {
+      /** 
+       * Call to test Perform Javascript in Web Viewer
+       * Method is what method will run in FileMaker if isActive 
+       */
+      let param = {
+        method: API + ".initialize",
+        config: { webviewer: WEBVIEWER, function: callback },
+        data: { active: true, },
+      };
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
+      return true;
+    };
 
   </script>
-  </head>
-  <body>
-      <div class="container-fluid mt-1" id="calendar" hidden></div>
+  <!-- Full Calendar -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> -->
+    <!-- BY PLUGIN -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/index.global.min.js"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.11/index.global.min.js"></script> -->
+    <!-- PREMIUM -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.11/index.global.min.js"></script>
+    <!-- <script src="fullcalendar.scheduler.min.js"></script> -->
 
-    <!-- API FUNCTIONS FOR FILEMAKER -->
-    <!-- <script src="./bundle.js"></script>-->
-    <script src="./Events.js"></script>
-    <script src="./fmCallback.js"></script>
-    <script>
-      //START AUTOMATICALLY; OTHERWISE CALL JS FROM FILEMAKER WITH OPTIONS
-      //OnLoad, Calls Script ( method : calendar.initialize)
-      //FileMaker Calls callback, with JSON of settings
-      //JS Processes settings and loads calendar
+  <!-- Recurrence Rule Library -->
+  <script src="https://cdn.jsdelivr.net/npm/rrule@2.6.4/dist/es5/rrule.min.js"></script>
+  <!-- the rrule-to-fullcalendar connector. must go AFTER the rrule lib -->
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/rrule@6.1.11/index.global.min.js"></script>
 
-      //THIS SHOULD BE A PROPERTY PASSED FROM FILEMAKER TO MAP FM FIELDS TO FC PROPERTIES
-      const SETTINGS = {}; //SETTINGS.eventFields
+  <!-- BOOTSTRAP 5 Theme -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Popper
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"</script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js"</script> -->
+  <!-- BOOTSTRAP 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
 
-      function initialize (settings="{}") {
+  <!-- Full Calendar Custom CSS -->
+  <style>
+    .fc-timegrid-event {
+      overflow: hidden;
+    }
+  </style>
+</head>
 
-        let fmSettings = JSON.parse(settings);
-//        const { querySettings } = fmSettings;
-//        const { userSettings } = fmSettings;
-//        const { Users } = fmSettings;
-        SETTINGS.USERS = fmSettings.Users;
-        SETTINGS.USERS.admins = JSON.parse(fmSettings.Users.admins);
-        // Users.admins
-        // Users.current
+<body>
 
-//        const { calendarSettings } = fmSettings;
-        SETTINGS.CALENDAR = fmSettings.calendarSettings;
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script src="./Events.js"></script>
+  <script src="./fmCallback.js"></script>
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement("div"), {
+        id: API, className: "container-fluid mt-1", hidden: true
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
 
-//        const { eventFields } = fmSettings;
-        SETTINGS.EVENT_FIELDS = fmSettings.eventFields;
+    if (URL_PARAMETERS.get("data")) {
+      createCalendar(URL_PARAMETERS.get("data"));
+      show(true);
+    };
+    function initialize(options) {
+      createCalendar(options);
+    };
 
-        //PASS AN ARRAY OF SOURCE OPTIONS?? (color, display, etc) OR, assign the same events function to passed sources?
-//        const calendarSources = [ { id: "493F6ABB-76CE-4A1C-BE7F-FC2237453997", color: "red", admins:[], extendedHours:[], resources:[], editable, constraint, display, overlap(), allow(), startEditable, durationEditable } ];
-//        const { calendarSources } = fmSettings;
-        SETTINGS.SOURCES = fmSettings.calendarSources;
+    const SETTINGS = {}; //SETTINGS.eventFields
+    var calendar;
 
+    function createCalendar(settings) {
+//      settings = settings ? settings : "{}";
+//          console.log(settings);
+      // ERROR CHECK: settings is object
+      const { Options, Settings } = JSON.parse(settings ? settings : "{}");
+//      SETTINGS.USER = User;
+//      SETTINGS.CALENDAR = Settings;
+//      SETTINGS.SOURCES = Sources;
+//      SETTINGS.FIELDS = Fields;
+      SETTINGS.user = Settings.user;
+      SETTINGS.eventSources = Settings.eventSources;
+      SETTINGS.event = Settings.event;
 
-        var calendar = new FullCalendar.Calendar(document.getElementById(API), 
-          Object.assign(SETTINGS.CALENDAR, {
-            eventSources: [
-              {
-                //NEEDS TO ADD THIS EVENT FUNCTION TO EACH SOURCE (EVENT PROPERTIES OVERWRITE SOURCE PROPERTIES??)
-                events: (fetchInfo, successCallback, failureCallback) => events( Object.assign(fetchInfo, {source:0} ), successCallback, failureCallback),
-                //color: "red",   // an option!
-//                constraint: [{start:"2024-03-10T00:00:0", end: "2024-4-10T00:00:0"}],
-                //constraint: "businessHours",
+      calendar = new FullCalendar.Calendar(document.getElementById(API),
+        Object.assign(Options, {
+          schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
+          eventSources: 
+            // ERROR CHECK: SETTINGS.SOURCES.SETTINGS is array
+            Options.eventSources.map((object, index) => ({
+              ...object,
+//              id : SETTINGS.eventSources[index].id,
+              events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index, source: object.id }, successCallback, failureCallback),
+            })),
 
-                //textColor: "white", // an option!
-                // editable, startEditable, durationEditable, display, overlap(), constraint, allow()
-                //                success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
-                //                eventDataTransform: (eventData) => eventDataTransform(eventData),
-              }
-            ],
-            //constraint: {start:"2024-03-10T00:00:0", end: "2024-4-10T00:00:0"},
-            businessHours: {
-                  start:"2024-03-10T00:00:0", end: "2024-4-10T00:00:0",
-                  startTime: '10:00', // a start time (10am in this example)
-                  endTime: '18:00', // an end time (6pm in this example)
+/*          businessHours: {
+            start: "2024-03-10T00:00:0", end: "2024-4-10T00:00:0",
+            startTime: '10:00', // a start time (10am in this example)
+            endTime: '18:00', // an end time (6pm in this example)
 
-                  daysOfWeek: [ 1, 2, 3, 4 ]
-                  // days of week. an array of zero-based day of week integers (0=Sunday)
-                  // (Monday-Thursday in this example)
-                },
-            eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
-            eventDataTransform: (eventData) => eventDataTransform(eventData),
+            daysOfWeek: [1, 2, 3, 4]
+            // days of week. an array of zero-based day of week integers (0=Sunday)
+            // (Monday-Thursday in this example)
+          },
+  */        
+//          eventConstraint: "businessHours",
+          eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+          eventDataTransform: (eventData) => eventDataTransform(eventData),
+          eventDidMount: (arg) => eventDidMount(arg),
 
-            eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent),
-            //          eventConstraint: "2",
-            eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent),
-            //          eventDrop: "f ONCE UPDATE STOPS",
-            eventChange: (changeInfo) => eventChange(changeInfo),
+          select: (selectionInfo) => select(selectionInfo), //NEW EVENT
+//          selectConstraint: "businessHours",
+//          selectAllow: => not before close or after open
+          dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
 
-            select: (selectionInfo) => select(selectionInfo), //NEW EVENT
-            dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
+//          eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent),
+          //          eventConstraint: "2",
+          eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent),
+          //          eventDrop: "f ONCE UPDATE STOPS",
+          eventChange: (changeInfo) => eventChange(changeInfo),
+          eventRemove: (removeInfo) => eventRemove(removeInfo),
 
-            eventClick: (eventClickInfo) => eventClick(eventClickInfo),
+          eventClick: (eventClickInfo) => {
+            eventClickInfo.jsEvent.preventDefault(); // don't let the browser navigate
+            if (eventClickInfo.event.url) {
+              window.open(eventClickInfo.event.url);
+            } else {
+              eventClick(eventClickInfo);
+            }
+          },
+          //          eventContent: (arg) => eventContent(arg, factory),
+        })
+      );
 
-          })
-        );
+//      calendar.getEventSources()[0].id = SETTINGS.SOURCES.SETTINGS[0].id;
+      show(true);
+      calendar.render();
+//      window.calendar = calendar;
+    };
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
 
-        calendar.getEventSources()[0].id = SETTINGS.SOURCES[0].id;
-        showCalendar(true);
-        calendar.render();
-        window.calendar = calendar;
-//        });
-      }
-      function showCalendar (show) {
-        if ( show == 1 ){
-          document.getElementById(API).hidden = false;
-        } else {
-          document.getElementById(API).hidden = true;
-        }
-      };
-
-
-      function changeView(view, date) {
-        if ( view == null ) {view=window.calendar.view.type};
+    function changeView(view, date) {
+      if (view == null) { view = window.calendar.view.type };
         window.calendar.changeView(view, date);
-//        window.calendar.gotoDate(date);
-        // calendar.gotoDate( date ) https://fullcalendar.io/docs/Calendar-gotoDate
-        // calendar.changeView("timeGridDay", "2017-06-01");
-        // https://fullcalendar.io/docs/Calendar-changeView
-      };
-      function gotoDate(date){
-        window.calendar.gotoDate(date);
-      };
-      window.refetchEvents = function refetchEvents() {
-        window.calendar.refetchEvents();
-      };
+      //        window.calendar.gotoDate(date);
+      // calendar.gotoDate( date ) https://fullcalendar.io/docs/Calendar-gotoDate
+      // calendar.changeView("timeGridDay", "2017-06-01");
+      // https://fullcalendar.io/docs/Calendar-changeView
+    };
+    function gotoDate(date) {
+      calendar.gotoDate(date);
       
+    };
+    function refetchEvents() {
+      calendar.refetchEvents();
+    };
 
 
 
 
-/*
-  Views: https://fullcalendar.io/docs/view-api
-          timeGridWeek | timeGridDay |  listDay | listWeek | listMonth | listYear | dayGridMonth | dayGridWeek | dayGridDay | dayGridYear | multiMonthYear 
-            timelineDay | timelineWeek | timelineMonth | timelineYear
-    https://fullcalendar.io/docs/month-view
-    https://fullcalendar.io/docs/timegrid-view
-    https://fullcalendar.io/docs/list-view
-    https://fullcalendar.io/docs/daygrid-view
-    https://fullcalendar.io/docs/multimonth-stack
-    https://fullcalendar.io/docs/multimonth-grid
-  Toolbar  https://fullcalendar.io/docs/toolbar
-    footerToolbar: https://fullcalendar.io/docs/footerToolbar
-    titleFormat: https://fullcalendar.io/docs/titleFormat
-    buttonText: https://fullcalendar.io/docs/buttonText
-    buttonIcons: https://fullcalendar.io/docs/buttonIcons
-    customButtons: https://fullcalendar.io/docs/customButtons
-  Sizing: https://fullcalendar.io/docs/sizing
-  Date Display: https://fullcalendar.io/docs/date-display
-  Date Navigation: https://fullcalendar.io/docs/date-navigation
-    initialDate:
-    validRange: limit where events can go... https://fullcalendar.io/docs/validRange
-  Date Links: https://fullcalendar.io/docs/date-nav-links
-  Date Clicks: https://fullcalendar.io/docs/date-clicking-selecting
-    selectConstraint: https://fullcalendar.io/docs/selectConstraint (Start End?)
-*    selectAllow: https://fullcalendar.io/docs/selectAllow (function) ()
-*    select: https://fullcalendar.io/docs/select-callback (function)
-  Event Data : https://fullcalendar.io/docs/event-model
-    eventDataTransform: https://fullcalendar.io/docs/eventDataTransform (function)
-    eventAdd: https://fullcalendar.io/docs/eventAdd (function)
-*    eventChange: https://fullcalendar.io/docs/eventChange (function)
-    eventRemove: https://fullcalendar.io/docs/eventRemove (function)
-    https://fullcalendar.io/docs/event-object
-  Event Sources: https://fullcalendar.io/docs/event-source
-    eventSources: https://fullcalendar.io/docs/event-source-object
-    eventSourceSuccess: https://fullcalendar.io/docs/eventSourceSuccess
-    eventSourceFailure: https://fullcalendar.io/docs/eventSourceFailure
-  Event Display: https://fullcalendar.io/docs/event-display
-~    eventDidMount
-~    eventWillUnmount
-  Event Clicking: https://fullcalendar.io/docs/event-clicking-hovering
-*    eventClick: https://fullcalendar.io/docs/eventClick
-    eventMouseEnter
-    eventMouseLeave
-  Event Dragging:
-    editable: https://fullcalendar.io/docs/editable
-    eventStartEditable: https://fullcalendar.io/docs/eventStartEditable (Dragging)
-    eventDurationEditable: https://fullcalendar.io/docs/eventDurationEditable ( resizing )
-    eventResizableFromStart
-~    eventResizeStart
-~    eventDragStart
-    eventOverlap: https://fullcalendar.io/docs/eventOverlap (function)
-    eventConstraint: https://fullcalendar.io/docs/eventConstraint
-*    eventAllow: https://fullcalendar.io/docs/eventAllow (function)
-    eventDrop: https://fullcalendar.io/docs/eventDrop
-  BusinessHours: https://fullcalendar.io/docs/business-hours
-  Background Events: https://fullcalendar.io/docs/background-events
 
-  CALENDAR | SOURCE | EVENT :
-  FORMATTING - FORMAT SOURCE EVENTS ( color, {backgrounColor, borderColor}, textColor, className, display )
-  EDITABLE - IF EVENTS ARE EDITABLE
-  CONSTRAINT - WHERE EVENTS CAN GO ( BY EVENT GROUPS )
-  OVERLAP - IF EVENTS CAN OVERLAP
-  ALLOW - WHERE EVENTS CAN GO (PROGRAMATICALLY)
-
-  EVENTS - FUNCTION FOR RETURNING RAW EVENTS
-  SUCCESS - PROCESS RAW EVENTS FROM EVENT SOURCE INTO RETURN ARRAY
-  EVENTDATATRANSFORM - PROCESS RAW EVENT ARRAY INTO RETURN FULLCALENDAR EVENTS
-
-
-
-*/
-
-
-// REMOVE AFTER TESTING
-/*
-if (SCRIPT=='') {
-  const calendarSettings2 = {
-    themeSystem: "bootstrap5",
-    initialView: "dayGridMonth",
-//          initialDate: "",
-    headerToolbar: {left:"today prev,next",center:"title",right:"dayGridMonth,timeGridWeek"},
-    allDaySlot: true,
-    nowIndicator: true,
-//          businessHours: true,
-
-    navLinks: true,
-    navLinkDayClick: "timeGridDay",
-
-    editable: true,
-//          eventDurationEditable: true,
-    eventResizableFromStart: true,
-//          eventStartEditable: true,
-    snapDuration: "00:15",
-
-    selectable: true,
-    selectMirror: true,
-    selectMinDistance: 5,
-  };
-  const eventFields2 = {};
-  eventFields.id = "@UUID";
-  eventFields.groupId = "groupId";
-  eventFields.allDay = "allDay";
-  eventFields.start = "start date";
-  eventFields.end = "end date";
-  eventFields.startStr = "startStr";
-  eventFields.endStr = "endStr";
-  eventFields.title = "title";
-  eventFields.url = "url";
-
-  eventFields.sourceId = "@fkey source";
-  eventFields._source = "@fkey source";
-  eventFields._layout = "#Event";
-let Settings = { calendarSettings: calendarSettings2, eventFields : eventFields2 }
-initialize(Settings);
-}
-*/
-
-/*
-        const eventFields = {};
-        eventFields.id = "@UUID";
-        eventFields.groupId = "groupId";
-        eventFields.allDay = "allDay";
-        eventFields.start = "start date";
-        eventFields.end = "end date";
-        eventFields.startStr = "startStr";
-        eventFields.endStr = "endStr";
-        eventFields.title = "title";
-        eventFields.url = "url";
-
-        eventFields.sourceId = "@fkey source";
-        eventFields._source = "@fkey source";
-        eventFields._layout = "#Event";
-        */
+    /*
+      Views: https://fullcalendar.io/docs/view-api
+              timeGridWeek | timeGridDay |  listDay | listWeek | listMonth | listYear | dayGridMonth | dayGridWeek | dayGridDay | dayGridYear | multiMonthYear
+                timelineDay | timelineWeek | timelineMonth | timelineYear
+        https://fullcalendar.io/docs/month-view
+        https://fullcalendar.io/docs/timegrid-view
+        https://fullcalendar.io/docs/list-view
+        https://fullcalendar.io/docs/daygrid-view
+        https://fullcalendar.io/docs/multimonth-stack
+        https://fullcalendar.io/docs/multimonth-grid
+      Toolbar  https://fullcalendar.io/docs/toolbar
+        footerToolbar: https://fullcalendar.io/docs/footerToolbar
+        titleFormat: https://fullcalendar.io/docs/titleFormat
+        buttonText: https://fullcalendar.io/docs/buttonText
+        buttonIcons: https://fullcalendar.io/docs/buttonIcons
+        customButtons: https://fullcalendar.io/docs/customButtons
+      Sizing: https://fullcalendar.io/docs/sizing
+      Date Display: https://fullcalendar.io/docs/date-display
+      Date Navigation: https://fullcalendar.io/docs/date-navigation
+        initialDate:
+        validRange: limit where events can go... https://fullcalendar.io/docs/validRange
+      Date Links: https://fullcalendar.io/docs/date-nav-links
+      Date Clicks: https://fullcalendar.io/docs/date-clicking-selecting
+        selectConstraint: https://fullcalendar.io/docs/selectConstraint (Start End?)
+    *    selectAllow: https://fullcalendar.io/docs/selectAllow (function) ()
+    *    select: https://fullcalendar.io/docs/select-callback (function)
+      Event Data : https://fullcalendar.io/docs/event-model
+        eventDataTransform: https://fullcalendar.io/docs/eventDataTransform (function)
+        eventAdd: https://fullcalendar.io/docs/eventAdd (function)
+    *    eventChange: https://fullcalendar.io/docs/eventChange (function)
+        eventRemove: https://fullcalendar.io/docs/eventRemove (function)
+        https://fullcalendar.io/docs/event-object
+      Event Sources: https://fullcalendar.io/docs/event-source
+        eventSources: https://fullcalendar.io/docs/event-source-object
+        loading: https://fullcalendar.io/docs/loading
+        eventSourceSuccess: https://fullcalendar.io/docs/eventSourceSuccess
+        eventSourceFailure: https://fullcalendar.io/docs/eventSourceFailure
+      Event Display: https://fullcalendar.io/docs/event-display
+    ~    eventDidMount
+    ~    eventWillUnmount
+      Event Clicking: https://fullcalendar.io/docs/event-clicking-hovering
+    *    eventClick: https://fullcalendar.io/docs/eventClick
+        eventMouseEnter
+        eventMouseLeave
+      Event Dragging:
+        editable: https://fullcalendar.io/docs/editable
+        eventStartEditable: https://fullcalendar.io/docs/eventStartEditable (Dragging)
+        eventDurationEditable: https://fullcalendar.io/docs/eventDurationEditable ( resizing )
+        eventResizableFromStart
+    ~    eventResizeStart
+    ~    eventDragStart
+        eventOverlap: https://fullcalendar.io/docs/eventOverlap (function)
+        eventConstraint: https://fullcalendar.io/docs/eventConstraint
+    *    eventAllow: https://fullcalendar.io/docs/eventAllow (function)
+        eventDrop: https://fullcalendar.io/docs/eventDrop
+      BusinessHours: https://fullcalendar.io/docs/business-hours
+      Background Events: https://fullcalendar.io/docs/background-events
+    
+      CALENDAR | SOURCE | EVENT :
+      FORMATTING - FORMAT SOURCE EVENTS ( color, {backgrounColor, borderColor}, textColor, className, display )
+      EDITABLE - IF EVENTS ARE EDITABLE
+      CONSTRAINT - WHERE EVENTS CAN GO ( BY EVENT GROUPS )
+      OVERLAP - IF EVENTS CAN OVERLAP
+      ALLOW - WHERE EVENTS CAN GO (PROGRAMATICALLY)
+    
+      EVENTS - FUNCTION FOR RETURNING RAW EVENTS
+      SUCCESS - PROCESS RAW EVENTS FROM EVENT SOURCE INTO RETURN ARRAY
+      EVENTDATATRANSFORM - PROCESS RAW EVENT ARRAY INTO RETURN FULLCALENDAR EVENTS
+    
+      eventSources : [
+        {
+          id
+          events : [],
+            url
+            format
+          color
+          backgroundColor
+          borderColor
+          textColor
+          className : []
+          editable
+            startEditable
+            durationEditable
+            resourceEditable
+          display
+          overlap
+          constraint
+          allow
+          defaultAllDay
+          success
+          failure
+          eventDataTransform
+        }
+      ]
+    
+    
+    */
 
 
+    // REMOVE AFTER TESTING
+    /*
+    if (SCRIPT=='') {
+      const calendarSettings2 = {
+        themeSystem: "bootstrap5",
+        initialView: "dayGridMonth",
+    //          initialDate: "",
+        headerToolbar: {left:"today prev,next",center:"title",right:"dayGridMonth,timeGridWeek"},
+        allDaySlot: true,
+        nowIndicator: true,
+    //          businessHours: true,
+    
+        navLinks: true,
+        navLinkDayClick: "timeGridDay",
+    
+        editable: true,
+    //          eventDurationEditable: true,
+        eventResizableFromStart: true,
+    //          eventStartEditable: true,
+        snapDuration: "00:15",
+    
+        selectable: true,
+        selectMirror: true,
+        selectMinDistance: 5,
+      };
+      const eventFields2 = {};
+      eventFields.id = "@UUID";
+      eventFields.groupId = "groupId";
+      eventFields.allDay = "allDay";
+      eventFields.start = "start date";
+      eventFields.end = "end date";
+      eventFields.startStr = "startStr";
+      eventFields.endStr = "endStr";
+      eventFields.title = "title";
+      eventFields.url = "url";
+    
+      eventFields.sourceId = "@fkey source";
+      eventFields._source = "@fkey source";
+      eventFields._layout = "#Event";
+    let Settings = { calendarSettings: calendarSettings2, eventFields : eventFields2 }
+    initialize(Settings);
+    }
+    */
 
-    </script>
+    /*
+            const eventFields = {};
+            eventFields.id = "@UUID";
+            eventFields.groupId = "groupId";
+            eventFields.allDay = "allDay";
+            eventFields.start = "start date";
+            eventFields.end = "end date";
+            eventFields.startStr = "startStr";
+            eventFields.endStr = "endStr";
+            eventFields.title = "title";
+            eventFields.url = "url";
+    
+            eventFields.sourceId = "@fkey source";
+            eventFields._source = "@fkey source";
+            eventFields._layout = "#Event";
+            */
 
-  </body>
+
+
+  </script>
+
+</body>
+
 </html>
-
