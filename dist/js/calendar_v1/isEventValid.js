@@ -1,188 +1,95 @@
-//import DateUtils from "./utils/DateUtils.js";
-//import isSameDay from "date-fns/isSameDay";
-//import isAfter from "date-fns/isAfter";
-//import isBefore from "date-fns/isBefore";
-//import differenceInMilliseconds from "date-fns/differenceInMilliseconds";
-//import hoursToMilliseconds from "date-fns/hoursToMilliseconds";
-
-//class CalendarRules {
-// Public Fields Note: Private Fields, #field, do not work in FM desktop webviewer
-
-
-
 EXIT_SUCCESS = { response: true, message: "OK" };
 
-EXIT_FAILURE = [
-  {
-    test: "isReservationAfterStartDate",
-    response: false,
-    message: "Reservation is not after start date",
-    // Reservation must be after ${startDate}
-  },
-  {
-    test: "isReservationBeforeEndDate",
-    response: false,
-    message: "Reservation is not before End date",
-    // Reservation must be before ${endDate}
-  },
-  {
-    test: "isReservationOnAvailableDay",
-    response: false,
-    message: "Reservation is not an available day",
-    // Reservation must be during business hours
-  },
-  {
-    test: "isReservationAfterStartTime",
-    response: false,
-    message: "Reservation is before start time",
-    // Reservation must be during business hours
-    //const isNonBusinessSlot = Boolean((arg.jsEvent.target as HTMLDivElement).className === 'fc-non-business');
-  },
-  {
-    test: "isReservationBeforeEndTime",
-    response: false,
-    message: "Reservation is after end time",
-    // Reservation must be during business hours
-  },
-  {
-    test: "isReservationAfterOpenDay",
-    response: false,
-    message: "Reservation is before open day",
-    // Reservation must be after ${startDate}
-  },
-  {
-    test: "isReservationBeforeCloseDay",
-    response: false,
-    message: "Reservation is after close day",
-    // Reservation must be before ${endDate}
-  },
-  {
-    test: "doesReservationSpanMultipleDays",
-    response: false,
-    message: "Reservation spans multiple days",
-  },
-  {
-    test: "isPersonUnderMaxDuration",
-    response: false,
-    message: "Over maximum allotted duration for the day",
-    // Reservation is over user's max hours of ${userHours}
-  },
-  {
-    test: "isNotOverlappingShutdown",
-    response: false,
-    message: "You cannot overlap a shutdown event",
-    // Reservation cannot overlap a shutdown event
-  },
-  {
-    test: "isUnderMaxUsers",
-    response: false,
-    message: "Too many users",
-    // Reservation is over the max users of ${maxUsers}
-  },
-];
-/*
-function userAccess(index) {
-  // SET PER eventSource
-  let extendedHours = SETTINGS.eventSources[index].extendedHours ? SETTINGS.eventSources[index].extendedHours : [];
-  let access = extendedHours.includes(SETTINGS.USER.id) ? "extendedHours" : "user";
-  let admins = SETTINGS.eventSources[index].admins ? SETTINGS.eventSources[index].admins : [];
-  access = admins.includes(SETTINGS.USER.id) ? "admin" : access;
+function isValid(event) {
+// {start, end, extendedProps.person, extendedProps.status}
+  let isDuration = isValidDuration(event);
+  if (!isDuration.response) return isDuration;
 
-  return access;
-}
-*/
+  let isAfterStart = isEventAfterStart(event);
+  if (!isAfterStart.response) return isAfterStart;
+//console.log(isAfterStart);
+  let isAboveMinimum = isEventAboveMinimum(event);
+  if (!isAboveMinimum.response) return isAboveMinimum;
 
-function isEventValid(event) {
+  let isBeforeEnd = isEventBeforeEnd(event);
+  if (!isBeforeEnd.response) return isBeforeEnd;
 
-  let isAfterStart = isEventAfterStart(newEvent);
-  if (!isAfterStart.response) {
-//    toaster(isAfterStart.message);
-    return isAfterStart;
-  }
-  let isAboveMinimum = isEventAboveMinimum(newEvent);
-  if (!isAboveMinimum.response) {
- //   toaster(isAboveMinimum.message);
-    return isAboveMinimum;
-  }
-  let isBeforeEnd = isEventBeforeEnd(newEvent);
-  if (!isBeforeEnd.response) {
-//    toaster(isBeforeEnd.message);
-    return isBeforeEnd;
-  }
-  // CURRENTLY IN EVENT CONSTRAINT
-  let isDuringBusinessHours = isEventDuringBusinessHours(newEvent);
-  if (!isDuringBusinessHours.response) {
-//    toaster(isDuringBusinessHours.message);
-    return isDuringBusinessHours;
-  } 
-  let isBelowMaximum = isEventBelowMaximum(newEvent);
-  if (!isBelowMaximum.response) {
-//    toaster(isBelowMaximum.message);
-    return isBelowMaximum;
-  }
-  //TEST FOR USERHOURS
-  let isUnderHours = isUnderUserHours(newEvent);
-  if (!isUnderHours.response) {
-//    toaster(isUnderHours.message);
-    return isUnderHours;
-  }
-  //TEST FOR MAXUSERS
-  let isUnderMax = isUnderMaxUsers(newEvent);
-  if (!isUnderMax.response) {
-//    toaster(isUnderMax.message);
-    return isUnderMax;
-  }
+  let isUnderMax = isUnderMaxUsers(event);
+  if (!isUnderMax.response) return isUnderMax;
 
+  // CURRENTLY IN EVENT CONSTRAINT AND SELECT CONSTRAINT FOR USERS
+  let isDuringBusinessHours = isEventDuringBusinessHours(event);
+  if (!isDuringBusinessHours.response) return isDuringBusinessHours;
 
+  let isBelowMaximum = isEventBelowMaximum(event);
+  if (!isBelowMaximum.response) return isBelowMaximum;
+
+  let isUnderHours = isUnderUserHours(event);
+  if (!isUnderHours.response) return isUnderHours;
+
+  return EXIT_SUCCESS;
 }
 
 
 // START AND MINIMUM ARE ALWAYS ENFORCED
 // BUSINESSHOURS, END, AND MAXIMUM ARE IGNORED FOR PERSON = EXTENDED HOURS OR USER = ADMIN
 
+function isValidDuration (event) {
+  const EXIT_FAILURE = { response: false, message: `Reservation end must be after it starts` };
+//console.log(event.start);
+//console.log(event.end);
+  return { ...EXIT_FAILURE, response: event.start < event.end };
+}
 function isEventAfterStart(event) {
-  //START DEPENDS ON USER, MODIFIED TO USER ACCESS
-  let eventConstraint = calendar.getOption("eventConstraint"); // ALWAYS INCLUDE THE MINIMUM START TO END
-  if (eventConstraint == "businessHours") {
-    eventConstraint = event.source ? event.source.constraint : SETTINGS.SOURCES[0].constraint;
-  }
-  if (!eventConstraint.start) return { response: true }; // BUSINESS HOURS
+//  console.log(event);
+  // {start, constraint? if not set use calendar.eventConstraint }
+  // SELECTION, DATECLICK, NEWEVENT DON'T HAVE EVENT.CONSTRAINT, EVENT.SOURCE.CONSTRAINT
+  // EVENTCONSTRAINT MIGHT BE SET TO BUSINESSHOURS FOR USER
+  // WHAT TO USE FOR START CONSTRAINT? SETTINGS.SOURCES[0].constraint
+//  let eventConstraint = event.constraint ? event.constraint : calendar.getOption("eventConstraint"); //SET FOR USERS TO SOURCECONSTRAINT {OPEN, CLOSE}
+  let eventConstraint = SETTINGS.CALENDAR.window ? SETTINGS.CALENDAR.window : calendar.getOption("eventConstraint");
+  // WHEN eventConstraint set to "businessHours", event.constraint set to {open,close}
+//  if ( eventConstraint = "businessHours" ) eventConstraint = SETTINGS.SOURCES[0].constraint;
+  const START = getDate(eventConstraint.start);
+//  console.log(START);
+//  console.log(eventConstraint);
+//  console.log(calendar.getOption("eventConstraint"));
+  if (!START) return EXIT_SUCCESS;
+  const EXIT_FAILURE = { response: false, message: `Reservation must be after ${getTimestampString(START)}` };
 
-  return { response: (event.start >= eventConstraint.start), message: `Reservation must be after ${getTimestampString(eventConstraint.start)}` };
+  return { ...EXIT_FAILURE, response: event.start >= START };
 }
 function isEventBeforeEnd(event) {
-  //END DEPENDS ON USER, MODIFIED TO USER ACCESS
-  let eventConstraint = calendar.getOption("eventConstraint"); // ALWAYS INCLUDE THE MINIMUM start to end
-  if (eventConstraint == "businessHours") {
-    eventConstraint = event.source ? event.source.constraint : SETTINGS.SOURCES[0].constraint;
-  }
-  if (!eventConstraint.end) return { response: true };
+  // {end, constraint? if not set use calendar.eventConstraint}
 
-  // EVENT CONSTRAINT IS ALREADY SET BY USER TO THE MINIMUMS
-  //  if ( SETTINGS.USER.access == "admin" ) return {response: true };
-  //  let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
-  //  if ( SETTINGS.calendar.extendedHours.includes(person)) return {response: true };
+  let eventConstraint = event.constraint ? event.constraint : calendar.getOption("eventConstraint"); //SET FOR USERS TO SOURCECONSTRAINT {OPEN, CLOSE}
+//  if ( eventConstraint = "businessHours" ) eventConstraint = SETTINGS.SOURCES[0].constraint;
+  const END = getDate(eventConstraint.end);
 
-  return { response: (event.end <= eventConstraint.end), message: `Reservation must be before ${getTimestampString(eventConstraint.end)}` };
+  if (!END) return EXIT_SUCCESS;
+  const EXIT_FAILURE = { response: false, message: `Reservation must be before ${getTimestampString(END)}` };
+
+  return { ...EXIT_FAILURE, response: event.end <= END };
 }
 function isEventDuringBusinessDay(event) {
-  let result = { response: false, message: `Reservation must be on business days` };
+  // {start, end}
+  // USED TO CHECK SELECTION FOR USER WHEN DATECLICK OR ISVALID EVENT
+  const EXIT_FAILURE = { response: false, message: `Reservation must be on business days` };
 
   let eventConstraint = calendar.getOption("businessHours");
-  if (!eventConstraint) return { response: true };
+  if (!eventConstraint) return EXIT_SUCCESS;
   if (eventConstraint == true) {
     eventConstraint = {
       // days of week. an array of zero-based day of week integers (0=Sunday)
       daysOfWeek: [1, 2, 3, 4, 5], // Monday - Friday
-      startTime: '9:00', // a start time (10am in this example)
-      endTime: '17:00', // an end time (6pm in this example)
+      startTime: '9:00', // a start time (9am in this example)
+      endTime: '17:00', // an end time (5pm in this example)
     }
   }
 
   //CHECK BUSINESS DAYS
   if (eventConstraint.daysOfWeek) {
     let days = getEventDays(event).length;
-    //    let days = Math.ceil((event.end.getTime() - event.start.getTime())/(1000*60*60*24));
     let inBusinessDays = true;
     let starting = new Date(event.start);
     for (let index = 0; index <= days && inBusinessDays; index++) {
@@ -191,129 +98,114 @@ function isEventDuringBusinessDay(event) {
         inBusinessDays = eventConstraint.daysOfWeek.includes(starting.getDay() + index);
       }
     }
-    if (!inBusinessDays) return result;
+    if (!inBusinessDays) return EXIT_FAILURE;
   }
-  return { response: true };
+  return EXIT_SUCCESS;
 }
-
 function isEventDuringBusinessHours(event) {
-  // USED TO CHECK SELECTION FOR USER WHEN DATECLICK OR MANUAL EVENT?
+  // {start, end}
+  // USED TO CHECK SELECTION FOR USER WHEN DATECLICK OR ISVALID EVENT
+  const EXIT_FAILURE = { response: false, message: `Reservation must be during business hours` };
+
   let inBusinessDays = isEventDuringBusinessDay(event);
   if (!inBusinessDays.response) return inBusinessDays;
 
-  let result = { response: false, message: `Reservation must be during business hours` };
-
   let eventConstraint = calendar.getOption("businessHours");
-  if (!eventConstraint) return { response: true };
+  if (!eventConstraint) return EXIT_SUCCESS;
   if (eventConstraint == true) {
     eventConstraint = {
       // days of week. an array of zero-based day of week integers (0=Sunday)
       daysOfWeek: [1, 2, 3, 4, 5], // Monday - Friday
-      startTime: '9:00', // a start time (10am in this example)
-      endTime: '17:00', // an end time (6pm in this example)
+      startTime: '9:00', // a start time (9am in this example)
+      endTime: '17:00', // an end time (5pm in this example)
     }
   }
-
-
-  //CHECK BUSINESS DAYS
-  /*
-  if (eventConstraint.daysOfWeek) {
-    let days = getEventDays(event).length;
-    let inBusinessDays = true;
-    let starting = new Date(event.start);
-    for (let index = 0; index <= days && inBusinessDays; index++) {
-      starting.setDate(starting.getDate() + index);
-      if (starting <= event.end) {
-        inBusinessDays = eventConstraint.daysOfWeek.includes(starting.getDay() + index);
-      }
-    }
-    if (!inBusinessDays) return result;
-  }
-  */
 
   // CHECK BUSINESS HOURS
-  if (!eventConstraint.startTime && !eventConstraint.endTime) return { ...result, response: true };
-  else if (event.start.toDateString() != event.end.toDateString()) return result;
+  if (!eventConstraint.startTime && !eventConstraint.endTime) return EXIT_SUCCESS;
+  else if (event.start.toDateString() != event.end.toDateString()) return EXIT_FAILURE;
 
   if (eventConstraint.startTime) {
     let constraint = new Date(event.start);
     let [hours, minutes] = eventConstraint.startTime.split(":");
     constraint.setHours(hours, minutes);
 
-    if (event.start < constraint) return result;
+    if (event.start < constraint) return EXIT_FAILURE;
   }
   if (eventConstraint.endTime) {
     let constraint = new Date(event.end);
     let [hours, minutes] = eventConstraint.endTime.split(":");
     constraint.setHours(hours, minutes);
 
-    if (event.end > constraint) return result;
+    if (event.end > constraint) return EXIT_FAILURE;
   }
 
-  return { ...result, response: true };;
+  return EXIT_SUCCESS;
 }
 function isEventAboveMinimum(event) {
+  // {start, end}
   // USE SOURCE IF NOT SELECTION
-  let minTime = event.source ? event.source.internalEventSource.extendedProps.minTime : SETTINGS.SOURCES[0].minTime;
-  //  console.log(event.source);
-  if (!minTime) return { response: true };
+  let minTime = event.source ? event.source?.internalEventSource.extendedProps.minTime : SETTINGS.SOURCES[0].minTime;
+  const EXIT_FAILURE = { response: false, message: `Reservation must be greater than ${minTime} minutes` };
+
+  if (!minTime) return EXIT_SUCCESS;
 
   let minMilliseconds = minTime * 60 * 1000;
   let eventMilliseconds = event.end.getTime() - event.start.getTime();
 
-  return { response: (eventMilliseconds >= minMilliseconds), message: `Reservation must be greater than ${minTime} minutes` };
+  return { ...EXIT_FAILURE, response: eventMilliseconds >= minMilliseconds };
 }
 function isEventBelowMaximum(event) {
+  // {start, end, extendedProps.person, extendedProps.status}
   // USE SOURCE IF NOT SELECTION
   let maxTime = event.source ? event.source.internalEventSource.extendedProps.minTime : SETTINGS.SOURCES[0].maxTime;
-  if (!maxTime) return { response: true };
-
-  // IGNORE FOR SUPPORT, UNATTENDED, SHUTDOWN, CANCELED (!=Confirmed)
-  if (event.extendedProps?.status && event.extendedProps?.status != "Confirmed") return { response: true };
-
-  if (SETTINGS.USER.access == "admin") return { response: true };
-  // USE EVENT.PERSON FOR EVENTS, SETTINGS.USER.id FOR SELECTIONS
+  const EXIT_FAILURE = { response: false, message: `Reservation must be less than ${maxTime} minutes` };
   let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
-  if (SETTINGS.CALENDAR.extendedHours.includes(person)) return { response: true };
+
+  // IGNORE FOR ADMIN USERS AND IF PERSON IS IN EXTENDED HOURS
+  if (!maxTime || SETTINGS.USER.access == "admin" || SETTINGS.CALENDAR.extendedHours.includes(person)) return EXIT_SUCCESS;
+  // IGNORE FOR SUPPORT, UNATTENDED, SHUTDOWN, CANCELED (!=Confirmed)
+  if (event.extendedProps?.status && event.extendedProps?.status != EVENT_STATUS.normal) return EXIT_SUCCESS;
 
   let maxMilliseconds = maxTime * 60 * 1000;
   let eventMilliseconds = event.end.getTime() - event.start.getTime();
 
-  return { response: (eventMilliseconds <= maxMilliseconds), message: `Reservation must be less than ${maxMilliseconds / 60 / 1000} minutes` };
+  return { ...EXIT_FAILURE, response: eventMilliseconds <= maxMilliseconds };
 }
 function isUnderUserHours(event) {
-  // USE SOURCE IF NOT SELECTION
-  // USER USER IF SELECTION
-
-  // dropInfo is potential new time, dragged event is current event time
-  // Ignore draggedEvent for calculation ( use getEvents )
+  // {start, end, extendedProps.person, extendedProps.status}
+  // USE EVENT.SOURCE.USERHOURS IF NOT SELECTION, SOURCE[0].userHours IF SELECTION
+  // USE EVENT.PERSON IF NOT SELECTION, USER IF SELECTION, 
   let userHours = event.source ? event.source.internalEventSource.extendedProps.userHours : SETTINGS.SOURCES[0].userHours;
-  let result = { response: false, message: `User reservations must be less than ${userHours} hours per day` };
+  const EXIT_FAILURE = { response: false, message: `User reservations must be less than ${userHours} hours per day` };
+  let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
 
-  if (!userHours) return { response: true };
-  if (SETTINGS.USER.access != "user") return { response: true };
-  if (event.extendedProps?.status == EVENT_STATUS.unattended) return { response: true };
+  // IGNORE FOR ADMIN USERS AND IF PERSON IS IN EXTENDED HOURS
+  if (!userHours || SETTINGS.USER.access == "admin" || SETTINGS.CALENDAR.extendedHours.includes(person)) return EXIT_SUCCESS;
+  // IGNORE FOR UNATTENDED RESERVATIONS ??
+  if (event.extendedProps?.status == EVENT_STATUS.unattended) return EXIT_SUCCESS;
 
-  const newEventDuration = event.end.getTime() - event.start.getTime(); // differenceInMilliseconds(end, start);
+//  const newEventDuration = event.end.getTime() - event.start.getTime();
   const maxDuration = userHours * 60 * 60 * 1000; //hoursToMilliseconds(userHours);
+  const eventMilliseconds = event.end.getTime() - event.start.getTime();
 
-  if (newEventDuration > maxDuration) return result;
+  if (eventMilliseconds > maxDuration) return EXIT_FAILURE;
 
   let totalHours = getUserHours(event);
-  return { ...result, response: totalHours * 60 * 60 * 1000 <= maxDuration };
+  return { ...EXIT_FAILURE, response: totalHours * 60 * 60 * 1000 <= maxDuration };
 }
 function isUnderMaxUsers(event) {
+  // {start, end, id, extendedProps.person, extendedProps.status}
   // USE SOURCE IF NOT SELECTION
   let maxUsers = event.source ? event.source.internalEventSource.extendedProps.maxUsers : SETTINGS.SOURCES[0].maxUsers;
-  let result = { response: false, message: `Maximum number of users must be less than ${maxUsers}` };
+  const EXIT_FAILURE = { response: false, message: `Maximum number of users must be less than ${maxUsers}` };
+  let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
 
-  if (!maxUsers) return { response: true };
-  if (event.extendedProps?.status && event.extendedProps?.status == EVENT_STATUS.unattended) return { response: true };
+  if (!maxUsers) return EXIT_SUCCESS;
+  if (event.extendedProps?.status && event.extendedProps?.status == EVENT_STATUS.unattended) return EXIT_SUCCESS;
 
-  let person = event.extendedProps.person
   // GET ALL OVERLAPPING RESERVATIONS NOT THIS PERSON OR UNATTENDED
   const overlappingEvents = calendar.getEvents().filter((element) => {
-
     return (
       element.end > event.start && element.start < event.end &&
       element.id !== event.id &&
@@ -337,11 +229,11 @@ function isUnderMaxUsers(event) {
     userTotals[index] = userCount.length;
   });
 
-  //  console.log(Math.max(userTotals));
-  return { ...result, response: Math.max(userTotals) <= maxUsers };
+  return { ...EXIT_FAILURE, response: Math.max(userTotals) <= maxUsers };
 }
 
 function getEventDays(event) {
+  // {start, end}
   //RETURN AN ARRAY OF DATES
   let inDays = [];
   let starting = new Date(event.start);
@@ -362,13 +254,14 @@ function isOverlapping(event, stillEvent) {
   }
 */
 function getEventOverlap(event, stillEvent) {
+  // {start, end}
   const { start: s1, end: e1 } = event;
   const { start: s2, end: e2 } = stillEvent;
 
   return Math.max(Math.min(e1, e2) - Math.max(s1, s2), 0);
 }
 function getUserHours(event) {
-
+  // {start, end, id, extendedProps.person}
   let days = getEventDays(event);
 
   let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
@@ -381,7 +274,7 @@ function getUserHours(event) {
       element.end > from && element.start < until &&
       element.id !== event.id &&
       element.extendedProps.person === person &&
-      element.extendedProps.status === EVENT_STATUS.confirmed
+      element.extendedProps.status === EVENT_STATUS.normal
     );
   });
 
@@ -450,7 +343,6 @@ function toaster(message) {
     element.setAttribute("aria-atomic", "true");
     //      element.setAttribute("data-bs-autohide", "false");
 
-
     parent.appendChild(element);
     document.body.appendChild(parent);
   }
@@ -458,49 +350,14 @@ function toaster(message) {
 
   let toast = bootstrap.Toast.getOrCreateInstance(element);
   if (!toast.isShown()) toast.show();
-  /*
-  if (toast.isShown() && element.innerHTML != content ) {
-    element.innerHTML = content;
-    toast.show();
-  } else if (!toast.isShown()) toast.show();
-*/
-
-
-  /*
-
-  if (document.getElementById("toast")) {
-    element = document.getElementById("toast");
-    element.innerHTML = content;
-  } else {
-    parent = document.createElement("div");
-    parent.innerHTML = `
-    <div id="toast" class="toast align-items-center bg-warning" role="alert" aria-live="assertive" aria-atomic="true">
-      ${content}
-    </div>`;
-    document.body.appendChild(
-      Object.assign(parent, {
-        id: "toaster", className: "toast-container top-0 end-0"
-      }));
-    element = document.getElementById("toast");
-  }
-  let toast = bootstrap.Toast.getOrCreateInstance(element);
-  toast.show();
-
-  <div class="toast-container p-3" id="toastPlacement">
-  <div class="toast">
-    <div class="toast-header">
-      <img src="..." class="rounded me-2" alt="...">
-      <strong class="me-auto">Bootstrap</strong>
-      <small>11 mins ago</small>
-    </div>
-    <div class="toast-body">
-      Hello, world! This is a toast message.
-    </div>
-  </div>
-</div>
-*/
 }
-
+function hideWarning() {
+  if (document.getElementById("warning")) {
+    element = document.getElementById("warning");
+    let toast = bootstrap.Toast.getOrCreateInstance(element);
+    if (toast.isShown()) toast.hide();
+  }
+}
 
 /*******************
  * UTILITY FUNCTIONS

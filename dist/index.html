@@ -1,51 +1,122 @@
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!DOCTYPE html>
+<html lang="en-us">
+<head><meta charset="UTF-8" />
+  <title>Web Applications</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <!-- https://support.claris.com/s/article/Linking-directly-to-an-OAuth-sign-in-when-opening-apps-with-FileMaker-WebDirect?language=en_US -->
+  <script src="js/oauth_v1/fmwebd_oauth.js"></script>
+
+    <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
+    <script>
+//      const API = "qrcode";
+
+      const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
+      const DB = URL_PARAMETERS.get("db");
+      const APP = URL_PARAMETERS.get("app");
+      URL_PARAMETERS.delete("db"); URL_PARAMETERS.delete("app");
+
+      const HOST = window.location.hostname,
+        WEBD = "/fmi/webd/", // Default location for FileMaker WebDirect
+        HOME = window.location.protocol + "//" + HOST + WEBD,
+        ALERT = "The Back button is disabled for this application.";
+
+      let notice;
+      //notice = HOST + " will be down for scheduled maintenance Saturday, 1/21/2023 from 10:00am to 4:00pm.";
+      //notice="These applications are for testing only";
+
+    </script>
+
 </head>
 <body>
-<iframe id="webdirect-frame" frameborder="0" allowfullscreen src=""
-style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>
+  <iframe name="webDirect" id="webdirect-frame" frameborder="0" allowfullscreen src=""
+    style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>
+
+
+  <script>
+    const FRAME = document.getElementsByName("webDirect")[0];
+    const TRACKER = "3148297417811849999593776656047571234446757942870899620214";
+
+    let application = APP ? APP.replace("-", " ") : ( DB ? DB.replace("-", " ") : "" );
+    document.title = HOST + ( application ? ": " + application : "" );
+    const DBNAME = application ? encodeURIComponent(application) + ( URL_PARAMETERS.size ? "?" + URL_PARAMETERS.toString() : "" ) : "";
+    const uri = HOME + DBNAME;
+
+    function initOAuth() {
+      getProviderInfo(function(providerInfo) {
+        let data = providerInfo ? JSON.parse(providerInfo).data : "";
+//        console.log(JSON.stringify(data));
+        if (data != null && data != "" ) {
+          showOAuthLogin( data.Provider[0].Name );
+        } else {
+          FRAME.src = uri
+        }
+      });
+    }
+
+    function showOAuthLogin(providerName) {
+      let child = window.open("/js/oauth/popup.html", providerName, "width=800, height=600");
+      if (child==null){
+        alert("Please disable pop-up blockers for this site, then continue.");
+        child = window.open("/js/oauth/popup.html", providerName, "width=800, height=600");
+        if (child==null){
+          //POPUPS still blocked, go to login screen
+          FRAME.src = uri;
+//          return;
+        } 
+      }
+
+//      const trackingId = "3148297417811849999593776656047571234446757942870899620214";
+//      const master = window.location.hostname; //HOST
+
+      getOAuthURL(TRACKER, HOST, providerName, function(oauthUrl, requestId) {
+        child.location.replace(oauthUrl);
+
+        // Listen to localstorage event to receive response from OAuth provider
+        window.addEventListener("storage", function processOAuthResponse(event) {
+          // Response from OAuth provider
+          // Sample format: "trackingID=123432&identifier=83FF55EF5B8B1442D702C19DF63115BC&error=0"
+          let response = event.newValue;
+          
+          let retTrackingId = getOAuthResponseParameter(response, "trackingID");
+          // Compare tracking ID against returned one to make sure
+          // this is the correct response to process
+          if (TRACKER == retTrackingId) {
+            window.removeEventListener("storage", processOAuthResponse);
+            localStorage.removeItem("oauth-response");
+            doOAuthLogin( DBNAME, requestId, getOAuthResponseParameter(response, "identifier"), HOME, getOAuthResponseParameter(response, "error"), "webDirect" );
+          }
+        });
+      });
+    }
+
+    function getOAuthResponseParameter(input, parameter) {
+      if (input != null) return new URLSearchParams(input).get(parameter);
+      return "";
+    }
+
+    // Prevent Back button click
+    FRAME.addEventListener("load", function() {
+      history.pushState(null, null, null);
+    })
+    //history.pushState(null, null, document.title);
+    window.addEventListener("popstate", function () {
+      //Display the alert when back button is pressed
+      alert(alertText);
+      history.pushState(null, null, null);
+    });
+
+    window.addEventListener("load", function initialize() {
+      if (APP != null && APP != "") {
+        initOAuth();
+      }else{
+        FRAME.src = uri;
+      }
+      if (notice) alert(notice);
+      window.removeEventListener("load", initialize);
+    })
+  </script>
 </body>
-<script>
-
-let protocol = window.location.protocol;
-let hostname = window.location.hostname;
-//Default location for FileMaker WebDirect
-const webd = "/fmi/webd";
-//alertText is presented to the user when the back button is pressed
-const alertText = "The Back button is disabled for this application."
-//Pass any query parameters to the final url
-let query = window.location.search;
-//const urlParams = new URLSearchParams(query);
-//Pass the database filename as a query parameter, db=filename, to go directly to the file login
-let db = urlParams.get('db');
-//Optionally, grab the last path component as the database filename, within a folder /filename
-//let db = window.location.pathname.slice(1,-1);
-
-var uri = protocol + "//" + hostname + webd ;
-if (db) {
-	uri = uri + '/' + db;
-	document.title = db;
-}
-if (query) uri = uri + query;
-
-
-// Prevent Back button click
-window.addEventListener('popstate', function () {
-	//Display the alert when back button is pressed
-	alert(alertText);
-	history.pushState(null, null, document.title);
-});
-
-iframe = document.getElementById("webdirect-frame")
-iframe.addEventListener('load', function() {
-	history.pushState(null, null, document.title);
-})
-
-window.addEventListener('load', function() {
-	document.getElementById("webdirect-frame").src = uri;
-})
-</script>
 </html>
-
-<!-- https://icoremangement.com -->

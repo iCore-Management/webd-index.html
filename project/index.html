@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en-us">
 <head><meta charset="UTF-8" />
-  <title>iCore WebDirect</title>
+  <title>Web Applications</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -11,8 +11,7 @@
 
     <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
     <script>
-      const API = "webdirect";
-      document.title = API;
+//      const API = "qrcode";
 
       const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
       const DB = URL_PARAMETERS.get("db");
@@ -33,8 +32,7 @@
 </head>
 <body>
   <iframe name="webDirect" id="webdirect-frame" frameborder="0" allowfullscreen src=""
-    style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;">
-  </iframe>
+    style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>
 
 
   <script>
