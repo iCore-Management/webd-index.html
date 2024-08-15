@@ -36,8 +36,6 @@ function isValid(event) {
 
 function isValidDuration (event) {
   const EXIT_FAILURE = { response: false, message: `Reservation end must be after it starts` };
-//console.log(event.start);
-//console.log(event.end);
   return { ...EXIT_FAILURE, response: event.start < event.end };
 }
 function isEventAfterStart(event) {

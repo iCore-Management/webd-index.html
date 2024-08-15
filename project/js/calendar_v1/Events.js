@@ -53,7 +53,9 @@ function fetchEvents(fetchInfo) {
 //  https://fullcalendar.io/docs/events-function
 
   const { start, end, index } = fetchInfo;
-  const { id: id, layout: layout, fields: FIELDS } = SETTINGS.SOURCES[index];
+  const { id: id } = SETTINGS.SOURCES[index];
+  const layout = SETTINGS.QUERY.layout;
+  const FIELDS = SETTINGS.QUERY.fields;
 
   let query = {
     layouts: layout,
@@ -89,22 +91,22 @@ function sourceSuccess(rawEvents, index){
   return rawEvents.response.data;
 }*/
 
-function getEventFields(index){
+function getEventFields(table, fields){
 
-  const FIELDS = SETTINGS.SOURCES[index].fields;
+  const FIELDS = fields;
   let eventFields = {};
   for (const key in FIELDS) {
     let field = FIELDS[key];
-    eventFields[key] = getFieldName(field, index);
+    eventFields[key] = getFieldName(table, field);
   }
 
   return eventFields;
 }
 
-function getFieldName (field, index) {
+function getFieldName (table, field) {
   const [tableName, fieldName] = field.split("::");
 
-  if (SETTINGS.SOURCES[index].fields._table != tableName) return field;
+  if (table != tableName) return field;
   else return fieldName;
 }
 
@@ -119,11 +121,6 @@ function formatEvent(event, index) {
 //  }
   formatting = EVENT_FORMAT[event.status] ? EVENT_FORMAT[event.status] : EVENT_FORMAT.default;
   Object.assign(event, formatting);
-  /*
-  if ( event.editable){
-    event.borderColor = "green";
-  }
-  */
 
   return event;
 
@@ -135,16 +132,28 @@ function createEvent(eventInfo) {
 
   eventInfo.extendedProps = {
     person: SETTINGS.USER.id,
+    name: SETTINGS.USER.name,
     status : EVENT_STATUS.normal,
+    room: SETTINGS.CALENDAR.id,
     location : SETTINGS.CALENDAR.title,
 //    resources : eventInfo.resource?.id != null && eventInfo.resource?.id != SETTINGS.CALENDAR.id ? [{title : eventInfo.resource.title}] : null,
   };
+
+  //{"resource":{"id":"493F6ABB-76CE-4A1C-BE7F-FC2237453997","title":"STF.139"}
+
+
+
+  eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
+//  console.log(JSON.stringify(eventInfo));
   if (eventInfo.resource?.id && eventInfo.resource.id != SETTINGS.CALENDAR.id) {
-    eventInfo.extendedProps.resources = [{title : eventInfo.resource.title}];
-    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id,eventInfo.resource.id];
-  } else {
-    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
-  }
+    eventInfo.extendedProps.resources = [{title : eventInfo.resource.title, id: eventInfo.resource.id}];
+//    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id,eventInfo.resource.id];
+    eventInfo.resourceIDs.push(eventInfo.resource.id);
+//    console.log(JSON.stringify(eventInfo.resourceIDs));
+//    console.log(eventInfo.resource.id);
+  } //else {
+//    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
+//  }
 
   if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
   let result = isValid(eventInfo);
@@ -361,7 +370,8 @@ function showModal(eventInfo) {
       }));
   }
 
-  let location = event.extendedProps?.location ? `<div>${event.extendedProps.location}</div>` : "";
+  let name = eventInfo.title != event.extendedProps?.name ? `<div>${event.extendedProps.name}</div>` : "";
+  let location = eventInfo.title != event.extendedProps?.location ? `<div>${event.extendedProps.location}</div>` : "";
   let status = event.extendedProps?.status ? `<div><strong>${event.extendedProps.status}</strong></div>` : "";
 
   let date = "";
@@ -405,7 +415,8 @@ function showModal(eventInfo) {
     <div class="modal-header">
       <div>
       <div class="h5">${eventInfo.title}</div>
-      <div>${event.extendedProps.location}</div>
+      ${name}
+      ${location}
       </div>
       <button type="button" ${eventInfo.close} class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
     </div>`;

@@ -21,7 +21,8 @@
 function eventDataTransform(eventData, index = 0) {
   //TRANSFORM eventSourceSuccess ARRAY ITEM TO PARSABLE EVENT OBJECT
   //NOT CONVERTED TO EVENT OBJECT YET
-  const { constraint, fields: FIELDS } = SETTINGS.SOURCES[index];
+  const { constraint } = SETTINGS.SOURCES[index];
+  const FIELDS = SETTINGS.QUERY.fields;
 
   /*  IF USER:
         AND BUSINESS HOURS; 
@@ -47,7 +48,6 @@ function eventDataTransform(eventData, index = 0) {
   event.end = getDate(event.end);
 
   event.constraint = constraint;
-
 
   if (Array.isArray(eventData.portalData[FIELDS._resourcesPortal])) {
     event.resourceIds = eventData.portalData[FIELDS._resourcesPortal].map((row) => (

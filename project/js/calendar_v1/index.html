@@ -115,7 +115,7 @@
       createCalendar(options);
     };
 
-    const SETTINGS = {};
+    let SETTINGS = {};
     var calendar;
 
     function createCalendar(settings="{}") {
@@ -140,20 +140,21 @@
       Options.initialDate = getDate(Options.initialDate);
       Options.validRange = { start: getDate(Options.validRange.start), end: getDate(Options.validRange.end) };
 
+      // CALENDAR CONSTRAINT FOR ALL BASED ON START - END
       const START = getDate(Options.eventConstraint.start);
       const END = getDate(Options.eventConstraint.end);
-      // CALENDAR CONSTRAINT FOR ALL BASED ON START - END
       Options.eventConstraint = { start: START, end: END };
 
       // USER RESERVATION WINDOW
-      let reservationWindow = { start: getDate(Settings.calendar.window.start), end: getDate(Settings.calendar.window.end) }
+//      Settings.calendar.window = { start: getDate(Settings.calendar.window.start), end: getDate(Settings.calendar.window.end) };
+      Settings.calendar.window = { start: Math.max.apply(null, [START, getDate(Settings.calendar.window.start)]), end: Math.min.apply(null, [END, getDate(Settings.calendar.window.end)].filter(Boolean)) };
+
 
       Options.resources = Settings.calendar.resources.map((row) => ({
         ...row,
         parentId: Settings.calendar.id,
       })
       );
-//      Options.resources.push({id: Settings.calendar.id,title: Settings.calendar.title});
       let primaryResource = { id: Settings.calendar.id, title: Settings.calendar.title };
       Options.resources.push(primaryResource);
       Options.resourceOrder = "title";
@@ -162,12 +163,13 @@
       if (Settings.user.access != "user") {
         // DON'T ENFORCE BUSINESS HOURS FOR ADMIN OR EXTENDEDHOURS
         Options.businessHours = false;
-        reservationWindow = Options.eventConstraint;
+        Settings.calendar.window = Options.eventConstraint;
       } else {
-        Options.eventSources.forEach((element, index) => {
+        //Options.eventSources.forEach((element, index) => {
+          Settings.sources.forEach((element, index) => {
 
-          let after = Math.max.apply(null, [START, getDate(element.constraint.start)]);
-          let beforeArray = [END, getDate(element.constraint.end)];
+          let after = Math.max.apply(null, [Settings.calendar.window.start, getDate(element.constraint.start)]);
+          let beforeArray = [Settings.calendar.window.end, getDate(element.constraint.end)];
           let before = Math.min.apply(null, beforeArray.filter(Boolean));
 
           // USER SOURCE CONSTRAINT BASED ON OPEN - CLOSE
@@ -181,19 +183,26 @@
         }
         //        else Options.selectConstraint = Options.eventSources[0].constraint;
       }
-      Options.selectConstraint = Options.eventConstraint;
-      Settings.calendar.window = reservationWindow;
-      
+      Options.selectConstraint = Settings.calendar.window;
+//      Settings.calendar.window = reservationWindow;
+      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
 
       // SET GLOBALS
-      SETTINGS.USER = Settings.user;
-      SETTINGS.SOURCES = Settings.sources; //layout? fields?
-      SETTINGS.SOURCES.forEach((element,index) => {
-        element.fields = getEventFields(index);
-        element.id = Options.eventSources[index].id;
-        element.constraint = Options.eventSources[index].constraint;
-      });
-      SETTINGS.CALENDAR = Settings.calendar;
+//      SETTINGS.USER = Settings.user;
+//      SETTINGS.SOURCES = Settings.sources; //layout? fields?
+ //     SETTINGS.SOURCES.forEach((element,index) => {
+//        element.fields = getEventFields(index);
+//        element.id = Options.eventSources[index].id;
+//        element.constraint = Options.eventSources[index].constraint;
+//      });
+//      SETTINGS.CALENDAR = Settings.calendar;
+//      SETTINGS.QUERY = Settings.query;
+      SETTINGS = {
+        USER : Settings.user,
+        SOURCES : Settings.sources,
+        CALENDAR : Settings.calendar,
+        QUERY : Settings.query,
+      }
 //      SETTINGS.CALENDAR.window = reservationWindow;
 
       calendar = new FullCalendar.Calendar(document.getElementById(API),
@@ -201,11 +210,14 @@
 
         /* Premium Plugins: https://fullcalendar.io/docs/premium */
         schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
-scrollTime: "06:00:00",
-stickyHeaderDates : true,
-slotMinTime: "06:00:00",
+//scrollTime: '08:00:00',
+//stickyHeaderDates : true,
+//slotMinTime: "06:00:00",
+//slotMaxTime: "20:00:00",
 //selectable : false,
-
+//height: 'auto',
+//contentHeight: '50%',
+//	[ "Options.contentHeight"; "auto"; JSONString ];
 
 
         selectOverlap:(event) => selectOverlap(event),
@@ -223,7 +235,8 @@ slotMinTime: "06:00:00",
 
         eventSources: 
             // ERROR CHECK: Options.eventSources is array /*
-            Options.eventSources.map((object, index) => ({
+            //Options.eventSources.map((object, index) => ({
+            SETTINGS.SOURCES.map((object, index) => ({
               ...object,
               events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index }, successCallback, failureCallback),
               success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
