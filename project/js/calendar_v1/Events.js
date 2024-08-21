@@ -110,7 +110,7 @@ function getFieldName (table, field) {
   else return fieldName;
 }
 
-function formatEvent(event, index) {
+function formatEvent(event) {
   //COLOR BASED ON STATUS = CONFIRMED | CANCELED | UNATTENDED | SUPPORT | EDITING
   //DISPLAY BASED ON STATUS = SHUTDOWN
   //NOT CONVERTED TO EVENT OBJECT YET
@@ -142,6 +142,7 @@ function createEvent(eventInfo) {
   //{"resource":{"id":"493F6ABB-76CE-4A1C-BE7F-FC2237453997","title":"STF.139"}
 
 
+  // APPLY PRIMARY RESOURCE
 
   eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
 //  console.log(JSON.stringify(eventInfo));
@@ -154,6 +155,9 @@ function createEvent(eventInfo) {
   } //else {
 //    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
 //  }
+
+  // WHAT ABOUT APPLYING THE SOURCE VALUE?? https://fullcalendar.io/docs/Calendar-addEvent
+
 
   if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
   let result = isValid(eventInfo);
@@ -296,13 +300,14 @@ function createPopover(arg) {
 
   let edit = event.startEditable || event.durationEditable ? `
     <i class="bi bi-pencil-fill"></i>` : "";
+  let name = event.title == event.extendedProps?.location ? event.extendedProps?.name : event.extendedProps.location;
   let title = `
     <div class="d-flex justify-content-between">
       <div>${event.title}</div>
       <div class="px-2"></div>
       <div>${edit}</div>
     </div>
-    <div class="small">${event.extendedProps.location}</div>`;
+    <div class="small">${name}</div>`;
 
   let rangeFormat = {
     hour: "numeric",
@@ -351,7 +356,7 @@ function createPopover(arg) {
   arg.el.setAttribute("data-bs-placement", "left");
   arg.el.setAttribute("data-bs-html", "true");
   arg.el.setAttribute("data-bs-content", content);
-  arg.el.setAttribute("title", title);
+  arg.el.setAttribute("data-bs-title", title);
 
   new bootstrap.Popover(arg.el);
 };
@@ -370,6 +375,7 @@ function showModal(eventInfo) {
       }));
   }
 
+//  let title = eventInfo.title == eventInfo.extendedProps?.name ? eventInfo.extendedProps.name : eventInfo.extendedProps?.location;
   let name = eventInfo.title != event.extendedProps?.name ? `<div>${event.extendedProps.name}</div>` : "";
   let location = eventInfo.title != event.extendedProps?.location ? `<div>${event.extendedProps.location}</div>` : "";
   let status = event.extendedProps?.status ? `<div><strong>${event.extendedProps.status}</strong></div>` : "";

@@ -1,3 +1,7 @@
+//X CLOSEING POOVERS ON CALENDAR XMLHttpRequestUpload
+//EVENT WINDOW ALLOWED OUT OF BUSINESS getHours
+//ACTIVITY CHECKBOXES NOT REFRESHING QUICK ENOUGH
+// IF I WANT TO LOCK RESOURCES FOR USERS, WILL NEED TO SEND THE USERS RESOURCES
 
 
 /** EVENT MODEL ******************************************
@@ -18,10 +22,10 @@
  * 
  */
 
-function eventDataTransform(eventData, index = 0) {
+function eventDataTransform(eventData) {
   //TRANSFORM eventSourceSuccess ARRAY ITEM TO PARSABLE EVENT OBJECT
   //NOT CONVERTED TO EVENT OBJECT YET
-  const { constraint } = SETTINGS.SOURCES[index];
+//  const { constraint } = SETTINGS.SOURCES[index];
   const FIELDS = SETTINGS.QUERY.fields;
 
   /*  IF USER:
@@ -43,11 +47,13 @@ function eventDataTransform(eventData, index = 0) {
   for (const key in FIELDS) {
     event[key] = eventData.fieldData[FIELDS[key]];
   }
+  if ( !event.title ) event.title = event.name;
+
   // UPDATE TEXT DATES TO DATE OBJECTS
   event.start = getDate(event.start);
   event.end = getDate(event.end);
 
-  event.constraint = constraint;
+//  event.constraint = constraint;
 
   if (Array.isArray(eventData.portalData[FIELDS._resourcesPortal])) {
     event.resourceIds = eventData.portalData[FIELDS._resourcesPortal].map((row) => (
@@ -69,13 +75,17 @@ function eventDataTransform(eventData, index = 0) {
     event.supervisor
   ];
 
-  let validStart = isEventAfterStart({ ...event, constraint: constraint });
-  let validEnd = isEventBeforeEnd({ ...event, constraint: constraint });
+//  let validStart = isEventAfterStart({ ...event, constraint: constraint });
+//  let validEnd = isEventBeforeEnd({ ...event, constraint: constraint });
+//  let validStart = isEventAfterStart(event);
+//  let validEnd = isEventBeforeEnd(event);
 
-  event.editable = validStart.response && validEnd.response && (users.includes(SETTINGS.USER.id) || SETTINGS.USER.access == "admin") &&
+  event.editable = calendar.getOption('editable') && isEventAfterStart(event).response && isEventBeforeEnd(event).response && (users.includes(SETTINGS.USER.id) || SETTINGS.USER.access == "admin") &&
     ( event.status != EVENT_STATUS.canceled );
 
-  return formatEvent(event, index);
+
+//    console.log(event.editable);
+  return formatEvent(event);
 }
 
 function eventAdd(eventInfo) {
@@ -164,32 +174,23 @@ async function events(fetchInfo, successCallback, failureCallback) {
   let result = await fetchEvents(fetchInfo);
 
   if (result.messages[0].code == 0) {
-    //  console.log(result.response.dataInfo.foundCount + " Events found");
     successCallback(result);
-  } else {
-    let toast = bootstrap.Toast.getOrCreateInstance(document.getElementById("loading"));
-    if (toast.isShown()) toast.hide();
-
-    if (result.messages[0].code == 401) {
+  } else if (result.messages[0].code == 401) {
       //  OK, records not found
-      failureCallback();
-    } else {
-      //  ISSUE WARNING LOG
-      failureCallback(result.messages[0]);
-    }
+    failureCallback();
+  } else {
+    //  ISSUE WARNING LOG
+    failureCallback(result.messages[0]);
   }
 }
 function eventSourceSuccess(rawEvents, response) {
-//  calendar.unselect();
   return rawEvents.response.data;
-  //{"response":{},"messages":[{"code":"401","message":"No records match the request"}]}
-  //{"response":{"dataInfo":{"database":"LabTime","layout":"#Event","table":"#Event","totalRecordCount":246635,"foundCount":201,"returnedCount":201},"data":[{"fieldData":{"@UUID":"12382B2A-FF0B-BE42-BB47-3641C33EC29A","start.timestamp":"01/31/2024 09:00:00","end.timestamp":"01/31/2024 17:00:00","name":"Kluherz, Tk","location":"STF.139","account":"","status":"Confirmed","notes":"Cryostat","@fkey source":"9D2A0683-B4F0-9E43-93CC-B35F3229A841\r493F6ABB-76CE-4A1C-BE7F-FC2237453997\rD6BBD78D-239D-4100-81A8-8499CFDB23A7","#Event|Room::_Name":"STF.139","#Event|Person::_Name":"Kluherz, Tk","#Event|Person::@UUID":"9D2A0683-B4F0-9E43-93CC-B35F3229A841","#Event|Person::@fkey.Person":"DB83BC02-6D66-1D42-9598-0D825B04670F","#Event|Person!creator::@UUID":"9D2A0683-B4F0-9E43-93CC-B35F3229A841","#Event|Person::full_name":"Tk Kluherz"},"portalData":{"portal.event.activity":[{"recordId":"89","#Event|Activities::title":"Zone 2 - Princeton PL","#Event|Activities::@UUID":"D6BBD78D-239D-4100-81A8-8499CFDB23A7","?#Event|ACTIVITIES|Reservation!current::@UUID":"","modId":"1"}],"portal.extendedHours":[]},"recordId":"284462","modId":"1","portalDataInfo":[{"portalObjectName":"portal.event.activity","database":"Resops_Data","table":"#Event|Activities","foundCount":1,"returnedCount":1},{"portalObjectName":"portal.extendedHours","database":"Resops_Data","table":"#Event|Room|Locations|Competency|Proficiencies","foundCount":0,"returnedCount":0}]},
-  // ,"messages":[{"code":"0","message":"OK"}]}
 }
 function eventSourceFailure(messages) { }
 function loading(isLoading) {
 
-  let element;
+
+
   let content = `
     <div class="toast-body d-flex justify-content-between">
       <div>Loading Events...</div>
@@ -198,6 +199,7 @@ function loading(isLoading) {
       </div>
     </div>`;
 
+  let element;
   if (document.getElementById("loading")) {
     element = document.getElementById("loading");
   } else {
@@ -412,12 +414,14 @@ function eventOverlap(stillEvent, movingEvent) {
 };
 function eventAllow(dropInfo, draggedEvent) {
 
+//  console.log("EventAllow");
   var newEvent = draggedEvent.toPlainObject();
   newEvent.start = new Date(dropInfo.start);
   newEvent.end = new Date(dropInfo.end);
 
   // DOES PLAIN OBJECT RETRAIN CONSTRAINT??
   let result = isValid(newEvent);
+//  console.log(result);
   if (!result.response) {
     toaster(result.message);
     return false;
@@ -441,6 +445,9 @@ function eventResizeStop(changeInfo) {
     if (toast.isShown()) toast.hide();
   }
 }
+
+
+
 
 function eventContent(arg) {
 

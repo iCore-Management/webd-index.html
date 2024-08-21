@@ -1,4 +1,5 @@
-EXIT_SUCCESS = { response: true, message: "OK" };
+const EXIT_SUCCESS = { response: true, message: "OK" };
+const EXIT_FAILURE = { response: false };
 
 function isValid(event) {
 // {start, end, extendedProps.person, extendedProps.status}
@@ -7,7 +8,7 @@ function isValid(event) {
 
   let isAfterStart = isEventAfterStart(event);
   if (!isAfterStart.response) return isAfterStart;
-//console.log(isAfterStart);
+
   let isAboveMinimum = isEventAboveMinimum(event);
   if (!isAboveMinimum.response) return isAboveMinimum;
 
@@ -17,7 +18,8 @@ function isValid(event) {
   let isUnderMax = isUnderMaxUsers(event);
   if (!isUnderMax.response) return isUnderMax;
 
-  // CURRENTLY IN EVENT CONSTRAINT AND SELECT CONSTRAINT FOR USERS
+  // CURRENTLY IN EVENT CONSTRAINT AND SELECT CONSTRAINT FOR USERS ( = 'businessHours' )
+  // NEEDS TO VALIDATE FOR NEW FM EVENTS
   let isDuringBusinessHours = isEventDuringBusinessHours(event);
   if (!isDuringBusinessHours.response) return isDuringBusinessHours;
 
@@ -33,46 +35,47 @@ function isValid(event) {
 
 // START AND MINIMUM ARE ALWAYS ENFORCED
 // BUSINESSHOURS, END, AND MAXIMUM ARE IGNORED FOR PERSON = EXTENDED HOURS OR USER = ADMIN
-
 function isValidDuration (event) {
-  const EXIT_FAILURE = { response: false, message: `Reservation end must be after it starts` };
+  EXIT_FAILURE.message = `Reservation end must be after it starts`;
   return { ...EXIT_FAILURE, response: event.start < event.end };
 }
+
 function isEventAfterStart(event) {
-//  console.log(event);
-  // {start, constraint? if not set use calendar.eventConstraint }
+  // {start, constraint? if not set use SETTINGS.CALENDAR.window }
   // SELECTION, DATECLICK, NEWEVENT DON'T HAVE EVENT.CONSTRAINT, EVENT.SOURCE.CONSTRAINT
   // EVENTCONSTRAINT MIGHT BE SET TO BUSINESSHOURS FOR USER
-  // WHAT TO USE FOR START CONSTRAINT? SETTINGS.SOURCES[0].constraint
-//  let eventConstraint = event.constraint ? event.constraint : calendar.getOption("eventConstraint"); //SET FOR USERS TO SOURCECONSTRAINT {OPEN, CLOSE}
-  let eventConstraint = SETTINGS.CALENDAR.window ? SETTINGS.CALENDAR.window : calendar.getOption("eventConstraint");
-  // WHEN eventConstraint set to "businessHours", event.constraint set to {open,close}
-//  if ( eventConstraint = "businessHours" ) eventConstraint = SETTINGS.SOURCES[0].constraint;
-  const START = getDate(eventConstraint.start);
-//  console.log(START);
-//  console.log(eventConstraint);
-//  console.log(calendar.getOption("eventConstraint"));
-  if (!START) return EXIT_SUCCESS;
-  const EXIT_FAILURE = { response: false, message: `Reservation must be after ${getTimestampString(START)}` };
+  // WHAT TO USE FOR START CONSTRAINT? SETTINGS.CALENDAR.window
 
-  return { ...EXIT_FAILURE, response: event.start >= START };
+  // WHEN MOVING, EVENT CONSTRAINTS AUTO ENFORCED
+  //  if eventConstraint =bh, check window
+  //  event.constraint set to source ? source : eventConstraint
+  // WHEN ADDING, EVENT CONSTRAINT IS EMPTY
+  //  selectConstraint is business hours or window, if bh check window, if window, nothing
+
+  let eventConstraint = SETTINGS.CALENDAR.window;
+  //EVENT CONSTRAINT MIGHT BE BUSINESS HOURS
+  if (!eventConstraint.start) return EXIT_SUCCESS;
+  EXIT_FAILURE.message = `Reservation must be after ${getTimestampString(eventConstraint.start)}`;
+
+  return { ...EXIT_FAILURE, response: event.start >= eventConstraint.start };
 }
 function isEventBeforeEnd(event) {
-  // {end, constraint? if not set use calendar.eventConstraint}
+  // {end, constraint? if not set use SETTINGS.CALENDAR.window}
 
-  let eventConstraint = event.constraint ? event.constraint : calendar.getOption("eventConstraint"); //SET FOR USERS TO SOURCECONSTRAINT {OPEN, CLOSE}
-//  if ( eventConstraint = "businessHours" ) eventConstraint = SETTINGS.SOURCES[0].constraint;
-  const END = getDate(eventConstraint.end);
+  let eventConstraint = SETTINGS.CALENDAR.window;
+  //EVENT.CONSTRAINT IS EITHER ALREADY ENFORCED BY JS, OR NULL
+  //UNLESS COMING FROM FILEMAKER ISEVENTVALID, MUST CHECK AGAINST BUSINESSHOURS AND WINDOW MANUALLY
 
-  if (!END) return EXIT_SUCCESS;
-  const EXIT_FAILURE = { response: false, message: `Reservation must be before ${getTimestampString(END)}` };
+  if (!eventConstraint.end) return EXIT_SUCCESS;
 
-  return { ...EXIT_FAILURE, response: event.end <= END };
+  EXIT_FAILURE.message = `Reservation must be before ${getTimestampString(eventConstraint.end)}`;
+  return { ...EXIT_FAILURE, response: event.end <= eventConstraint.end };
 }
 function isEventDuringBusinessDay(event) {
   // {start, end}
   // USED TO CHECK SELECTION FOR USER WHEN DATECLICK OR ISVALID EVENT
-  const EXIT_FAILURE = { response: false, message: `Reservation must be on business days` };
+  EXIT_FAILURE.response = false;
+  EXIT_FAILURE.message = `Reservation must be on business days`;
 
   let eventConstraint = calendar.getOption("businessHours");
   if (!eventConstraint) return EXIT_SUCCESS;
@@ -103,7 +106,8 @@ function isEventDuringBusinessDay(event) {
 function isEventDuringBusinessHours(event) {
   // {start, end}
   // USED TO CHECK SELECTION FOR USER WHEN DATECLICK OR ISVALID EVENT
-  const EXIT_FAILURE = { response: false, message: `Reservation must be during business hours` };
+  EXIT_FAILURE.response = false;
+  EXIT_FAILURE.message = `Reservation must be during business hours`;
 
   let inBusinessDays = isEventDuringBusinessDay(event);
   if (!inBusinessDays.response) return inBusinessDays;
@@ -144,7 +148,7 @@ function isEventAboveMinimum(event) {
   // {start, end}
   // USE SOURCE IF NOT SELECTION
   let minTime = event.source ? event.source?.internalEventSource.extendedProps.minTime : SETTINGS.SOURCES[0].minTime;
-  const EXIT_FAILURE = { response: false, message: `Reservation must be greater than ${minTime} minutes` };
+  EXIT_FAILURE.message = `Reservation must be greater than ${minTime} minutes`;
 
   if (!minTime) return EXIT_SUCCESS;
 
@@ -157,7 +161,7 @@ function isEventBelowMaximum(event) {
   // {start, end, extendedProps.person, extendedProps.status}
   // USE SOURCE IF NOT SELECTION
   let maxTime = event.source ? event.source.internalEventSource.extendedProps.minTime : SETTINGS.SOURCES[0].maxTime;
-  const EXIT_FAILURE = { response: false, message: `Reservation must be less than ${maxTime} minutes` };
+  EXIT_FAILURE.message = `Reservation must be less than ${maxTime} minutes`;
   let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
 
   // IGNORE FOR ADMIN USERS AND IF PERSON IS IN EXTENDED HOURS
@@ -246,11 +250,7 @@ function getEventDays(event) {
 
   return inDays
 }
-/* USE GET EVENT OVERLAP = 0
-function isOverlapping(event, stillEvent) {
-     return event.start < stillEvent.end && event.end > stillEvent.start;
-  }
-*/
+
 function getEventOverlap(event, stillEvent) {
   // {start, end}
   const { start: s1, end: e1 } = event;
@@ -364,436 +364,11 @@ function hideWarning() {
 
 function getDate(string) {
   let date = new Date(string);
-  if (date instanceof Date && !isNaN(date)) return date;
-
+  if ( string && date instanceof Date && !isNaN(date) ) return date;
   return null;
 }
 function getTimestampString(date) {
   formatDate = new Date(date);
   formatTime = { hour: "numeric", minute: "2-digit", };
   return `${formatDate.getMonth() + 1}/${formatDate.getDate()}/${formatDate.getFullYear()} ${FullCalendar.formatDate(formatDate, formatTime)}`;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-function eventConstraint(index) {
-  // SET PER event
-  if (SETTINGS.eventSources[index].userAccess == "user" && calendar.getOption("businessHours")) {
-    //    let businessHours = calendar.getOption("businessHours"); // APPLY TO USERS
-    //    if (businessHours) {
-    return "businessHours";
-    //    }
-  }
-  /*
-    let selectConstraint = calendar.getOption("selectConstraint"); // ALWAYS INCLUDE THE MINIMUM start to end
-    //    let eventConstraint = calendar.getOption("eventConstraint"); // PROVIDES USER OPEN CLOSE ["businessHours",{start,end}]
-    let businessHours = calendar.getOption("businessHours"); // APPLY TO USERS
-    let sourceConstraint = SETTINGS.eventSources[index].constraint; // INCLUDE THE OPEN AND CLOSE SOURCE DATES FOR USERS
-  
-  
-    // ONLY APPLY SOURCE CONSTRAINT FOR USERS
-    if (SETTINGS.eventSources[index].userAccess == "user") {
-      let start, end, constraint;
-      let userConstraint = [];
-      //CHECK BUSINESS HOURS
-      //      let userConstraint = [];
-      if (businessHours) {
-        userConstraint.push("businessHours");
-      }
-      let endArray = [selectConstraint.end, sourceConstraint.end];
-      //      let endArray = array.filter(Boolean);
-      //      console.log(selectConstraint.start);
-      //      console.log(selectConstraint.end);
-      //      console.log(sourceConstraint.start);
-      //      console.log(sourceConstraint.end);
-      start = new Date(Math.max.apply(null, [selectConstraint.start, sourceConstraint.start]));
-      end = new Date(Math.min.apply(null, endArray.filter(Boolean)));
-      //      console.log(sourceConstraint.end);
-  
-      userConstraint.push({
-        start: start,
-        end: end,
-      });
-  
-      return userConstraint;
-      //      console.log(userConstraint);
-    } else {
-      //      userConstraint = selectConstraint;
-      //      calendar.setOption("eventConstraint", userConstraint); //OVERWRITE ADMIN/EXTENDEDHOURS EVENT CONSTRAINT
-      return selectConstraint;
-    }
-    //    console.log(userConstraint);
-    //    return userConstraint;
-  */
-}
-function constraint(index) {
-  // SER PER eventSource
-}
-/*
-constructor(calendarSettings) {
-  const admins = calendarSettings.admins;
-  const businessHours = calendarSettings.businessHours;
-  const close = calendarSettings.close;
-  const open = calendarSettings.open;
-  const start = calendarSettings.start;
-  const end = calendarSettings.end;
-  const initialDate = calendarSettings.initialDate;
-  const initialView = calendarSettings.initialView;
-  const maxDuration = calendarSettings.maxDuration;
-  const maxUsers = calendarSettings.maxUsers;
-  const resources = calendarSettings.resources;
-  const source = calendarSettings.source;
-  const window = calendarSettings.window;
-  const extendedHours = calendarSettings.extendedHours;
-
-  this.source = source;
-
-  this.resources = resources;
-
-  // def: No reservations are allowed before the start date
-  this.startDate = validDateString(start);
-
-  // def: No reservations are allowed after the end date
-  this.endDate = validDateString(end);
-
-  // def: The maximum number of users that can be in the lab at the same time
-  this.maxUsers = maxUsers ? maxUsers : undefined;
-
-  // def: The maximum number of hours that a user can reserve the lab in
-  // a single day. The hours do not have to be contiguous
-  this.maxDuration = maxDuration ? maxDuration : undefined;
-
-  // Set Open Days HOW MANY DAYS FORWARD MUST A RESERVATION BE MADE?
-  // 3 = A RESERVATION MUST BE MADE AT LEAST 3 DAYS IN THE FUTURE FROM TODAY
-  // -7 = A RESERVATION CAN BE MADE UP TO 7 DAYS IN THE PAST
-  // ALLOW EDITS BACK TO THE RESERVATION WINDOW SETTING (CALENDAR.WINDOW)
-  this.openDays = open ? getNDaysInFuture(open + 1) : undefined;
-
-  // Set Close Days HOW MANY DAYS FORWARD CAN A RESERVATION BE MADE?
-  // 14 = A RESERVATION MUST BE MADE LESS THAN 14 DAYS IN THE FUTURE FROM TODAY
-  this.closeDays = close ? getNDaysInPast(end) : undefined;
-
-  // def: Array of people's UUIDs who are allowed to work after hours
-  this.extendedHours = extendedHours;
-
-  // def: Array of people's UUIDs who are have admin access to this calendar
-  this.admins = admins;
-
-  // def: The date that is displayed when the calendar loads
-  this.initialDate = initialDate;
-
-  // def: Full Calendar View that is displayed when the calendar loads
-  this.initialView = initialView ? initialView : "timeGridWeek";
-
-  // def: The maximum number of days a user can go back and modify an event
-  this.window = window ? window : 14;
-
-  // Specified what days and what times the lab is open.
-  // Confirmed reservations cannot be made when the lab is closed.
-  this.availableDays = businessHours[0]?.daysOfWeek || undefined;
-  this.startTime = businessHours[0]?.startTime || undefined;
-  this.endTime = businessHours[0]?.endTime || undefined;
-}
-
-function isOverlapping(event, stillEvent) {
-//  const { start: e1Start, end: e1End } = event;
-//  const { start: e2Start, end: e2End } = stillEvent;
-
-  return event.start < stillEvent.end && event.end > stillEvent.start;
-}
-*/
-function overlapAmount(event, stillEvent) {
-  const doesOverlap = isOverlapping(event, stillEvent);
-
-  if (doesOverlap) {
-    const { start: e1Start, end: e1End } = event;
-    const { start: e2Start, end: e2End } = stillEvent;
-
-    const overlapTime = [
-      e1End - e1Start,
-      e1End - e2Start,
-      e2End - e2Start,
-      e2End - e2Start,
-    ];
-
-    return Math.min.apply(null, overlapTime);
-  }
-
-  return 0;
-}
-
-// def: returns business hours a format that full calendar can consume
-function businessHours() {
-  return {
-    daysOfWeek: this.availableDays || [0, 1, 2, 3, 4, 5, 6],
-    startTime: this.startTime || "00:00",
-    endTime: this.endTime || "24:00",
-  };
-}
-
-function getUserAccessLevel(user) {
-  if (this.admins.includes(user)) return "admin";
-
-  if (this.extendedHours.includes(user)) return "extended";
-
-  return "user";
-}
-
-function isReservationAfterStartDate(dropInfo) {
-  if (!this.startDate) return true;
-
-  return isAfter(dropInfo.start, this.startDate);
-}
-
-function isReservationBeforeEndDate(dropInfo) {
-  if (!this.endDate) return true;
-
-  return isBefore(dropInfo.end, this.endDate);
-}
-
-function isReservationOnAvailableDay(dropInfo) {
-  if (!this.availableDays) return true;
-
-  const startDay = dropInfo.start.getDay();
-  const endDay = dropInfo.end.getDay();
-
-  if (!this.availableDays.includes(startDay)) return false;
-  if (!this.availableDays.includes(endDay)) return false;
-
-  return true;
-}
-
-function isReservationAfterStartTime(dropInfo) {
-  if (!this.startTime) return true;
-
-  const { start, end } = dropInfo;
-
-  if (this.doesReservationSpanMultipleDays(dropInfo)) return false;
-  if (!isAfterTime(start, this.startTime)) return false;
-  if (!isAfterTime(end, this.startTime)) return false;
-
-  return true;
-}
-
-function isReservationBeforeEndTime(dropInfo) {
-  if (!this.endTime) return true;
-
-  const { start, end } = dropInfo;
-
-  if (this.doesReservationSpanMultipleDays(dropInfo)) return false;
-  if (!isBeforeTime(start, this.endTime)) return false;
-  if (!isBeforeTime(end, this.endTime)) return false;
-
-  return true;
-}
-
-function isReservationAfterOpenDay(dropInfo) {
-  if (!this.openDays) return true;
-
-  const { start, end } = dropInfo;
-
-  if (!isAfterTime(start, this.openDays)) return false;
-  if (!isAfterTime(end, this.openDays)) return false;
-
-  return true;
-}
-
-function isReservationBeforeCloseDay(dropInfo) {
-  if (!this.closeDays) return true;
-
-  const { start, end } = dropInfo;
-
-  if (!isBeforeTime(start, this.closeDays)) return false;
-  if (!isBeforeTime(end, this.closeDays)) return false;
-
-  return true;
-}
-
-function isSameDay(start, end) {
-  return start.getDate() == end.getDate() && start.getMonth() == end.getMonth() && start.getFullYear() == end.getFullYear();
-}
-
-function doesReservationSpanMultipleDays(dropInfo) {
-  const { start, end } = dropInfo;
-
-  return !isSameDay(start, end);
-}
-
-// Returns true if the number of hours a user has reserved is less than the number of hours specified by maxDuration
-// If the user has multiple overlapping reservations, then only the
-
-
-function isNotOverlappingShutdown(dropTime, draggedEvent, allEvents) {
-  const shutdownEvents = allEvents.filter(
-    (event) => event.extendedProps.status === "Shutdown"
-  );
-
-  for (const shutdownEvent of shutdownEvents) {
-    if (this.isOverlapping(shutdownEvent, dropTime)) return false;
-  }
-
-  return true;
-}
-
-
-
-function performTests(eventInfo, tests) {
-  let { dropInfo } = eventInfo;
-  let { draggedEvent } = eventInfo;
-  let { allEvents } = eventInfo;
-
-  for (const test of tests) {
-    let result = this[test](dropInfo, draggedEvent, allEvents);
-
-    if (!result) {
-      return EXIT_FAILURE.find((failures) => {
-        return failures.test === test;
-      });
-    }
-  }
-
-  return EXIT_SUCCESS;
-}
-
-function isDroppable(eventInfo, user) {
-  let userAccessLevel = this.getUserAccessLevel(user);
-  let currentEventStatus = eventInfo.draggedEvent.extendedProps.status;
-
-  // If the user is a DAR or lab supervisor, they can make reservations whenever;
-  if (userAccessLevel === "admin") return EXIT_SUCCESS;
-
-  let tests = new Set();
-  switch (currentEventStatus) {
-    case "Confirmed":
-      tests.add("isReservationAfterStartDate");
-      tests.add("isReservationBeforeEndDate");
-      tests.add("isReservationOnAvailableDay");
-      tests.add("isReservationAfterOpenDay");
-      tests.add("isReservationBeforeCloseDay");
-      tests.add("isPersonUnderMaxDuration");
-      tests.add("isNotOverlappingShutdown");
-      tests.add("isUnderMaxUsers");
-
-      if (userAccessLevel === "user") {
-        tests.add("isReservationAfterStartTime");
-        tests.add("isReservationBeforeEndTime");
-      }
-      break;
-    case "Unattended":
-      tests.add("isReservationAfterStartDate");
-      tests.add("isReservationBeforeEndDate");
-      tests.add("isNotOverlappingShutdown");
-      break;
-    case "Support":
-      tests.add("isUnderMaxUsers");
-    case "Canceled":
-    case "Shutdown":
-      return EXIT_SUCCESS;
-  }
-
-  return this.performTests(eventInfo, Array.from(tests));
-}
-
-
-
-
-
-
-
-
-
-
-
-
-function getTodayStart() {
-  let start = new Date();
-  start.setUTCHours(0, 0, 0, 0);
-
-  return start;
-}
-
-function getNDaysInPast(numberOfDays) {
-  let date = getTodayStart();
-  date.setDate(date.getDate() - numberOfDays);
-
-  return date;
-}
-
-function getNDaysInFuture(numberOfDays) {
-  let date = getTodayStart();
-  date.setDate(date.getDate() + numberOfDays);
-
-  return date;
-}
-
-function validDateString(string) {
-  let date = new Date(string);
-
-  if (date instanceof Date && !isNaN(date)) return date;
-
-  return undefined;
-}
-
-function getTimeString(date) {
-  let hours = date.getHours();
-  let minutes = date.getMinutes();
-
-  return `${hours}:${minutes}`;
-}
-
-function timeStringToMinutes(timeString) {
-  let [hours, minutes] = timeString.split(":");
-  hours = parseInt(hours);
-  minutes = parseInt(minutes);
-
-  const minutesInHour = 60;
-
-  return hours * minutesInHour + minutes;
-}
-
-function compareTime(date, comparatorString, beforeAfter) {
-  let timestring = getTimeString(date);
-  let timeMinutes = timeStringToMinutes(timestring);
-  let comparatorMinutes = timeStringToMinutes(comparatorString);
-
-  if (beforeAfter === "after") {
-    return timeMinutes >= comparatorMinutes;
-  }
-
-  return timeMinutes <= comparatorMinutes;
-}
-
-function isAfterTime(date, limit) {
-  let flag = "after";
-
-  return compareTime(date, limit, flag);
-}
-
-function isBeforeTime(date, limit) {
-  let flag = "before";
-
-  return compareTime(date, limit, flag);
 }

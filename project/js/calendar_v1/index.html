@@ -115,18 +115,13 @@
       createCalendar(options);
     };
 
-    let SETTINGS = {};
+
+    const SETTINGS = {};
     var calendar;
 
     function createCalendar(settings="{}") {
       const { Options, Settings } = JSON.parse(settings);
       //OPTIONS FOR CALENDAR
-      //SETTINGS FOR??? {USER, SOURCES, CALENDAR}
-//      Settings.user.id = "3BF185A4-BDAF-448D-B119-EC5A8AE49648"; //ADMIN
-//>	[ "Options.eventSources.[0].id"; "493F6ABB-76CE-4A1C-BE7F-FC2237453997"; JSONString ]; //USE CALENDAR EVENT SOURCE KEY
-//	[ "Settings.user.id"; "3BF185A4-BDAF-448D-B119-EC5A8AE49648"; JSONString]; //USE PERSON KEY OF CURRENT USER //ADMIN
-//>	[ "Settings.user.id"; "52765E6A-8FA7-C549-A8CB-67548B5A8DEA"; JSONString]; //USE PERSON KEY OF CURRENT USER //USER
-      // sourceID: 493F6ABB-76CE-4A1C-BE7F-FC2237453997
 
       //SET CALENDAR USER ACCESS (BY SOURCE???)
       let extendedHours = Settings.calendar?.extendedHours ? Settings.calendar.extendedHours : [];
@@ -135,117 +130,349 @@
       Settings.calendar.extendedHours = extendedHours;
       Settings.user = {...Settings.user, access : admins.includes(Settings.user.id) ? "admin" : access };
       // ADMIN/ EXTENDEDHOURS IGNORES open/close, userHours, maxTime, businessHours
-     
-      // CONVERT DATES
-      Options.initialDate = getDate(Options.initialDate);
-      Options.validRange = { start: getDate(Options.validRange.start), end: getDate(Options.validRange.end) };
 
-      // CALENDAR CONSTRAINT FOR ALL BASED ON START - END
+      Options.resources = [];
+      if (Settings.calendar.resources?.length) {
+        Options.resources = Settings.calendar.resources?.map((row) => ({
+          ...row,
+          parentId: Settings.calendar.id,
+          })
+        );
+      }
+      Options.resources.push({ id: Settings.calendar.id, title: Settings.calendar.title });
+      Options.resourceOrder = "title";
+
+      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
+
+      // CALENDAR VALID REGION
+      Options.initialDate = getDate(Options.initialDate);
+      Options.validRange = { start: getDate(Options.validRange?.start), end: getDate(Options.validRange?.end) };
+
+      // CALENDAR CONSTRAINT FOR ALL USERS BASED ON START - END
       const START = getDate(Options.eventConstraint.start);
       const END = getDate(Options.eventConstraint.end);
       Options.eventConstraint = { start: START, end: END };
+      // users: (today - 14 , end )
+      // admins: (today - 14 )
+      
+      /** RESERVATION WINDOW
+       * 
+       * Sends Options.eventConstraint : { start, end }
+       *  to designate enforced calendar reservation boundaries //(start only, for admins)
+       *  applies to all sources
+       *  use as lock : { start, end }
+       * 
+       * Sends Options.businessHours : []
+       *  to designate user event and select constraints
+       *  applies to all sources
+       *  applies to users
+       * 
+       * Sends Settings.calendar.window : { start, end }
+       *  to designate user reservation window
+       *  applies to all sources
+       *  applies to users
+       *  for users set as { start : Max ( eventConstraint.start; window.start ), end : Min ( eventConstraint.end; window.end )}
+       *  for admins = eventConstraint {start}
+       *  verified for new reservations in Options.eventConstraint and Options.selectConstraint (unless case business hours)
+       *    eventAllow(), selectAllow(), must be verified incase of businessHours
+       * 
+       * Sends Settings.sources[0].constraint
+       *  to designate source : { start, end }
+       *  for users, sets a start and end date when reservations are allowed (combine with reservation window)
+       *  for users, set window as { start : Max ( [0].constraint.start; window.start ), end : Min ( [0].constraint.end; window.end )}
+       *  ignore for admins
+       *  //verify when moving reservations in eventAllow(), automatically since source applied
+       *  verify when new user selection in selectAllow(), manually by checking calendar.window
+       *    OR update window{} to include source[0].constraint
+       * 
+       * 
+       * Are constraints cumulative??? eventConstraint -> source[0].constraint -> [min]
+       *  Do new events apply the initial source? No, they are refetched with the source applied then
+       *    They are not event objects yet
+       * WHERE do I apply the global source start end vs lock date? in FM??
+       *  lock = Options.eventConstraint
+       *  window = min (window, lock)
+       *  source = Settings.sources[0].constraint
+       *  WILL the source constraint {start, end} combine with the eventConstriant {start, end}
+       *    for Total[event.constraint] and selectConstraint?
+       *    OR selectAllow() verify minimum window (selectConstraint = businessHours)
+       * 
+       * Options.selectConstraint = Options.eventConstraint
+       * 
+      **/
 
-      // USER RESERVATION WINDOW
-//      Settings.calendar.window = { start: getDate(Settings.calendar.window.start), end: getDate(Settings.calendar.window.end) };
-      Settings.calendar.window = { start: Math.max.apply(null, [START, getDate(Settings.calendar.window.start)]), end: Math.min.apply(null, [END, getDate(Settings.calendar.window.end)].filter(Boolean)) };
 
-
-      Options.resources = Settings.calendar.resources.map((row) => ({
-        ...row,
-        parentId: Settings.calendar.id,
-      })
-      );
-      let primaryResource = { id: Settings.calendar.id, title: Settings.calendar.title };
-      Options.resources.push(primaryResource);
-      Options.resourceOrder = "title";
-
-      //UPDATE CALENDAR BUSINESSHOURS BY ACCESS
       if (Settings.user.access != "user") {
-        // DON'T ENFORCE BUSINESS HOURS FOR ADMIN OR EXTENDEDHOURS
-        Options.businessHours = false;
+        Options.eventConstraint.end = null;
         Settings.calendar.window = Options.eventConstraint;
+        // DON'T ENFORCE BUSINESS HOURS / CONSTRAINT END FOR ADMIN OR EXTENDEDHOURS
+        Options.businessHours = false;
+
+        // REMOVE SOURCE[0]CONSTRAINTS FOR ADMINS
+        Settings.sources[0].constraint = null;
       } else {
-        //Options.eventSources.forEach((element, index) => {
-          Settings.sources.forEach((element, index) => {
-
-          let after = Math.max.apply(null, [Settings.calendar.window.start, getDate(element.constraint.start)]);
-          let beforeArray = [Settings.calendar.window.end, getDate(element.constraint.end)];
-          let before = Math.min.apply(null, beforeArray.filter(Boolean));
-
-          // USER SOURCE CONSTRAINT BASED ON OPEN - CLOSE
-          element.constraint = { start: getDate(after), end: getDate(before) };
-        });
-        // FOR USERS
-        // NEEDS TO VALIDATE SELECT CONSTRAINT IN SELECTALLOW() IF BUSINESSHOURS FOR OPEN CLOSE
-        // NEEDS TO VALIDATE EVENT CONSTRAINT IN EVENTALLOW() IF BUSINESSHOURS FOR OPEN CLOSE
-        if (Options.businessHours) {
-          Options.eventConstraint = "businessHours";
-        }
-        //        else Options.selectConstraint = Options.eventSources[0].constraint;
+        // USER RESERVATION WINDOW, APPLY MINIMUM LOCK AND WINDOW AND SOURCE[0]CONSTRAINTS
+        Settings.calendar.window = { start: Math.max.apply(null, [START, getDate(Settings.calendar.window.start), getDate(Settings.sources[0].constraint.start)]), end: Math.min.apply(null, [END, getDate(Settings.calendar.window.end), getDate(Settings.sources[0].constraint.end)].filter(Boolean)) };
+        // ENFORCE BUSINESS HOURS IF PROVIDED, OTHERWISE WINDOW
+        Options.eventConstraint = Options.businessHours ? "businessHours" : Settings.calendar.window;
       }
-      Options.selectConstraint = Settings.calendar.window;
-//      Settings.calendar.window = reservationWindow;
-      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
+      Options.selectConstraint = Options.eventConstraint;
 
       // SET GLOBALS
-//      SETTINGS.USER = Settings.user;
-//      SETTINGS.SOURCES = Settings.sources; //layout? fields?
- //     SETTINGS.SOURCES.forEach((element,index) => {
-//        element.fields = getEventFields(index);
-//        element.id = Options.eventSources[index].id;
-//        element.constraint = Options.eventSources[index].constraint;
-//      });
-//      SETTINGS.CALENDAR = Settings.calendar;
-//      SETTINGS.QUERY = Settings.query;
-      SETTINGS = {
-        USER : Settings.user,
-        SOURCES : Settings.sources,
-        CALENDAR : Settings.calendar,
-        QUERY : Settings.query,
-      }
-//      SETTINGS.CALENDAR.window = reservationWindow;
+      SETTINGS.USER = Settings.user;
+      SETTINGS.SOURCES = Settings.sources;
+      SETTINGS.CALENDAR = Settings.calendar;
+      SETTINGS.QUERY = Settings.query;
 
-      calendar = new FullCalendar.Calendar(document.getElementById(API),
-        Object.assign(Options, {
+
+    calendar = new FullCalendar.Calendar(document.getElementById(API),
+      Object.assign(Options, {
 
         /* Premium Plugins: https://fullcalendar.io/docs/premium */
         schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
-//scrollTime: '08:00:00',
-//stickyHeaderDates : true,
-//slotMinTime: "06:00:00",
-//slotMaxTime: "20:00:00",
-//selectable : false,
-//height: 'auto',
-//contentHeight: '50%',
-//	[ "Options.contentHeight"; "auto"; JSONString ];
+
+        /** TOOLBAR *****************************************
+         * + headerToolbar
+         * footerToolbar
+         * titleFormat
+         * titleRangeSeparator
+         * + buttonText
+         * buttonIcons; https://icons.getbootstrap.com/
+         * customButtons
+         */
+        
+        /** THEME *****************************************/
+        themeSystem : 'bootstrap5',
+
+        /** SIZING *****************************************
+         * + height
+         * + contentHeight
+         * aspectRatio
+         * expandRows
+         * updateSize()
+         * handleWindowResize
+         * windowResizeDelay
+         * + stickyHeaderDates
+         * stickyFooterScrollbar
+         * CALLBACKS
+         * windowResize =>
+         */
+        
+        /** MONTH VIEW *****************************************
+         * MONTH-VIEW-SPECIFIC OPTIONS
+         * fixedWeekCount
+         * showNonCurrentDates
+         */
+        
+        /** TIMEGRID VIEW *****************************************
+        TIMEGRID-SPECIFIC OPTIONS
+        eventMinHeight
+        eventShortHeight
+        slotEventOverlap
+        allDaySlot
+        All-Day Render Hooks
+
+        ** List View
+        LIST-VIEW-SPECIFIC OPTIONS
+        listDayFormat
+        listDaySideFormat
+        No-Events Render Hooks
+
+        ** DayGrid View
+        DAYGRID-SPECIFIC OPTIONS
+        monthStartFormat
+
+        ** Multi-Month Stack
+
+        ** Multi-Month Grid
+        MULTIMONTH-SPECIFIC OPTIONS
+        multiMonthMaxColumns
+        multiMonthMinWidth
+        multiMonthTitleFormat
+
+        ** Timeline View
+        TIMELINE-SPECIFIC OPTIONS
+        resourceGroupField
+        resourceAreaWidth
+        resourceAreaColumns
+        resourcesInitiallyExpanded
+        slotMinWidth
+        eventMinWidth
+        Timeline View with no Resources
+        Resource Group Render Hooks
+        Resource-Area Header Render Hooks
+
+        ** Vertical Resource View
+        datesAboveResources
+        Resource DayGrid View
+
+        ** Custom Views
+        TECHNIQUES
+        Custom Views via Settings
+
+        ** View API
+        + initialView
+        View Object
+        Calendar::view
+        Calendar::changeView
+        View Render Hooks
 
 
-        selectOverlap:(event) => selectOverlap(event),
-//        selectConstraint: selectConstraint(), //CALENDAR NOT SET YET
-        selectAllow:(selectionInfo) => selectAllow(selectionInfo),
+        ** Date & Time Display
+        WHOLE-DAY SETTINGS
+        + weekends
+        + hiddenDays
+        + dayHeaders
+        dayHeaderFormat
+        dayMinWidth
+        Day-Header Render Hooks
+        Day-Cell Render Hooks
 
+        TIME-AXIS SETTINGS
+        + slotDuration
+        slotLabelInterval
+        slotLabelFormat
+        + slotMinTime
+        + slotMaxTime
+        + scrollTime
+        + scrollTimeReset
+        Slot Render Hooks
+
+        METHODS
+        scrollToTime
+
+        CALLBACKS
+        datesSet
+
+
+        ** Date Navigation
+        + initialDate
+        dateIncrement
+        dateAlignment
+        + validRange
+
+        METHODS
+        Calendar::prev
+        Calendar::next
+        Calendar::prevYear
+        Calendar::nextYear
+        Calendar::today
+        Calendar::gotoDate
+        Calendar::incrementDate
+        Calendar::getDate
+
+
+        ** Date Nav Links
+        + navLinks
+        -> navLinkDayClick, view or function
+        -> navLinkWeekClick, view or function
+
+
+        ** Week Numbers
+        + weekNumbers
+        weekNumberCalculation
+        weekText
+        weekTextLong
+        weekNumberFormat
+        Week-Number Render Hooks
+        */
+
+
+        /** DATE CLICKING & SELECTING *****************************************
+         * + selectable, bool
+         * + selectMirror, bool
+         * + unselectAuto, bool
+         * unselectCancel, string */
+        selectOverlap: (event) => selectOverlap(event),
+        /* selectConstraint, group/businessHours */
+        selectAllow: (selectionInfo) => selectAllow(selectionInfo),
+        /* + selectMinDistance, int
+         * CALLBACKS */
         dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
         select: (selectionInfo) => select(selectionInfo), //NEW EVENT
+        /* unselect */
 
-        /* Event Model https://fullcalendar.io/docs/event-model */
+        /* NOW INDICATOR */
+        //+ nowIndicator, bool
+        //now
+        //Now-Indicator Render Hooks
+
+
+        /* BUSINESS HOURS */
+        //+ businessHours
+        //businessHours-per-resource
+
+
+        /* EVENT MODEL https://fullcalendar.io/docs/event-model */
+        //-> eventDataTransform
+        eventDataTransform: (eventData) => eventDataTransform(eventData),
+        //defaultAllDay
+        //defaultAllDayEventDuration
+        //defaultTimedEventDuration
+        //forceEventDuration
+
+        /* CALLBACKS */
         eventAdd: (eventInfo) => eventAdd(eventInfo), //https://fullcalendar.io/docs/eventAdd
         eventChange: (changeInfo) => eventChange(changeInfo),
         eventRemove: (removeInfo) => eventRemove(removeInfo),
+        //eventsSet
+
+
+        /* EVENT SOURCES https://fullcalendar.io/docs/event-source */
+        eventSources:
+          // ERROR CHECK: Options.eventSources is array /*
+          //Options.eventSources.map((object, index) => ({
+          SETTINGS.SOURCES.map((object, index) => ({
+            ...object,
+            events: (fetchInfo, successCallback, failureCallback) => events({ ...fetchInfo, index: index }, successCallback, failureCallback),
+            //+ id
+            //url
+            //format
+            //color
+            //backgroundColor
+            //borderColor
+            //textColor
+            //className
+            //editable
+            //startEditable
+            //durationEditable
+            //resourceEditable
+            //display
+            //overlap
+            //constraint
+            //allow
+            //defaultAllDay
+            //success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+            //failure	
+            
+          })),
+        //-> eventSourceSuccess (eventSources.success)
+        eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+        //-> eventSourceFailure (eventSources.failure)
+        //initialEvents
+        //lazyFetching
         loading: (isLoading) => loading(isLoading),
 
-        eventSources: 
-            // ERROR CHECK: Options.eventSources is array /*
-            //Options.eventSources.map((object, index) => ({
-            SETTINGS.SOURCES.map((object, index) => ({
-              ...object,
-              events: (fetchInfo, successCallback, failureCallback) => events({...fetchInfo, index : index }, successCallback, failureCallback),
-              success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
-              eventDataTransform: (eventData) => eventDataTransform(eventData, index),
-            })),
 
         /* EVENT DISPLAY https://fullcalendar.io/docs/event-display */
-        eventContent: (arg) => eventContent(arg),
-        eventDidMount: (arg) => eventDidMount(arg),
+        //eventColor (Event.color)
+        //eventBackgroundColor (Event.backgroundColor)
+        //eventBorderColor (Event.borderColor)
+        //eventTextColor (Event.textColor)
+        //eventDisplay (Event.display)
+        //eventTimeFormat
+        //displayEventTime
+        //displayEventEnd
+        //nextDayThreshold
+        //eventOrder
+        //eventOrderStrict
+        //progressiveEventRendering
+        //Event Render Hooks
+        //  eventClassNames
+          eventContent: (arg) => eventContent(arg),
+          eventDidMount: (arg) => eventDidMount(arg),
+        //  eventWillUnmount
+
 
         /* EVENT CLICKING AND HOVERING https://fullcalendar.io/docs/event-clicking-hovering */
         eventClick: (eventClickInfo) => {
@@ -256,67 +483,357 @@
             eventClick(eventClickInfo);
           }
         },
+        //->eventMouseEnter
+        //->eventMouseLeave
 
-        /* EVENT CONTROLS */
+
+        /** EVENT DRAGGING AND RESIZING *****************************************/
+        //* https://fullcalendar.io/docs/event-dragging-resizing
+        //FLAGS
+        //+ editable (Event.editable)
+        //+ eventStartEditable (Event.startEditable)
+        //+ eventResizableFromStart
+        //+ eventDurationEditable (Event.durationEditable)
+        //eventResourceEditable (Event.resourceEditable)
+        //droppable
+        //EFFECTS
+        //eventDragMinDistance
+        //dragRevertDuration
+        //+ dragScroll
+        //+ snapDuration
+        //allDayMaintainDuration
+        //fixedMirrorParent
+        //CONTROL
         eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent), //RETURN BOOLEAN
+        //eventConstraint, group/businessHours
         eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent), //RETURN BOOLEAN
-        /* EVENT CALLBACKS */
-        //        eventDragStart: (changeInfo) => eventDragStart(changeInfo), //https://fullcalendar.io/docs/eventDragStart
+        //dropAccept
+        //CALLBACKS
+        //-> eventDragStart
         eventDragStop: (changeInfo) => hideWarning(), //https://fullcalendar.io/docs/eventDragStop
-        //        eventDrop: (eventDropInfo) => eventDrop(eventDropInfo), //https://fullcalendar.io/docs/eventDrop
+        //-> eventDrop (event change in time)
+        //drop
+        //eventReceive
+        //eventLeave
+        //-> eventResizeStart
         eventResizeStop: (changeInfo) => hideWarning(), //https://fullcalendar.io/docs/eventResizeStop
+        //-> eventResize (event change in duration)
+
+
+        /** Event Popover */
+        //dayMaxEventRows
+        //dayMaxEvents
+        //eventMaxStack
+        //moreLinkClick
+        //dayPopoverFormat
+        //More-Link Render Hooks
+
+        /** Resource Data
+         * 
+         * 
+        ** Resource Display
+        resourceOrder
+        filterResourcesWithEvents
+        Resource Render Hooks */
+
       })
     );
-      show(true);
-      calendar.render();
-    };
+    show(true);
+    calendar.render();
+  };
 
     function changeView(view, date) {
       if (view == null) { view = window.calendar.view.type };
         calendar.changeView(view, getDate(date));
-      //        window.calendar.gotoDate(date);
-      // calendar.gotoDate( date ) https://fullcalendar.io/docs/Calendar-gotoDate
-      // calendar.changeView("timeGridDay", "2017-06-01");
       // https://fullcalendar.io/docs/Calendar-changeView
     };
     function gotoDate(date) {
-//      changeView(,date);
       calendar.gotoDate(getDate(date));
     };
     function refetchEvents(status) {
-//      console.log(status);
-      if ( status ) {
-      let result = JSON.parse(status);
-      if (result.response == false){
-  //      calendar.unselect();
-  //      SETTINGS._EVENT.revert();
-        toaster(result.message);
-        return false;
-      } }
+      if (status) {
+        let result = JSON.parse(status);
+        if (result.response == false) {
+          toaster(result.message);
+          return false;
+        }
+      }
+      //HIDE ALL POPOVERS SO THEY DON'T GET STUCK
+      document.querySelectorAll('[data-bs-toggle="popover"]').forEach((el, i) => {
+        //console.log(el);
+        let popoverInstance = bootstrap.Popover.getOrCreateInstance(el);
+        popoverInstance.hide();
+      });
       calendar.unselect();
       calendar.refetchEvents();
     };
     function isEventValid(event) {
 
       let newEvent = eventDataTransform(JSON.parse(event));
-
       let response = isValid(newEvent);
-      //{ start, end, id, extendedProps.person, extendedProps.status }
 
       let param = {
-      method: API + ".isValid",
-      config: { webviewer: WEBVIEWER, function: "" },
-      data: response,
+        method: API + ".isValid",
+        config: { webviewer: WEBVIEWER, function: "" },
+        data: response,
+      };
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
     };
-    FileMaker.PerformScriptWithOption(
-      SCRIPT,
-      JSON.stringify(param),
-      5
-    );
-    };
 
 
+/*
 
+Set Up Calendar with Functions -> Calendar.js
+Calendar.js calls Events for customizations
+Set Up callbacks in Calendar, passed to Events for customizations
+
+** Date & Time Display
+
+WHOLE-DAY SETTINGS
++ weekends
++ hiddenDays
++ dayHeaders
+dayHeaderFormat
+dayMinWidth
+Day-Header Render Hooks
+Day-Cell Render Hooks
+
+TIME-AXIS SETTINGS
++ slotDuration
+slotLabelInterval
+slotLabelFormat
++ slotMinTime
++ slotMaxTime
++ scrollTime
++ scrollTimeReset
+Slot Render Hooks
+
+METHODS
+scrollToTime
+
+CALLBACKS
+datesSet
+
+
+** Date Navigation
++ initialDate
+dateIncrement
+dateAlignment
++ validRange
+
+METHODS
+Calendar::prev
+Calendar::next
+Calendar::prevYear
+Calendar::nextYear
+Calendar::today
+Calendar::gotoDate
+Calendar::incrementDate
+Calendar::getDate
+
+
+** Week Numbers
++ weekNumbers
+weekNumberCalculation
+weekText
+weekTextLong
+weekNumberFormat
+Week-Number Render Hooks
+
+** Date Nav Links
++ navLinks
+-> navLinkDayClick, view or function
+-> navLinkWeekClick, view or function
+
+** Date Clicking & Selecting
++ selectable, bool
++ selectMirror, bool
++ unselectAuto, bool
+  unselectCancel, string
+-> selectOverlap
+  selectConstraint, group/businessHours
+-> selectAllow
+  selectMinDistance, int
+
+CALLBACKS
+-> dateClick
+-> select
+unselect
+
+METHODS
+Calendar::select
+Calendar::unselect
+
+
+** Now Indicator
++ nowIndicator, bool
+now
+Now-Indicator Render Hooks
+
+
+** Business Hours
++ businessHours
+businessHours-per-resource
+
+
+** Event Model
+Event Parsing
+Event Object
+Recurring Events
+RRule Plugin
+
+EVENT DATA PARSING
+-> eventDataTransform
+defaultAllDay
+defaultAllDayEventDuration
+defaultTimedEventDuration
+forceEventDuration
+
+METHODS
+Calendar::getEvents
+Calendar::getEventById
+Calendar::addEvent
+Event::setProp
+Event::setExtendedProp
+Event::setStart
+Event::setEnd
+Event::setDates
+Event::setAllDay
+Event::moveStart
+Event::moveEnd
+Event::moveDates
+Event::formatRange
+Event::remove
+Event::getResources
+Event::setResources
+Event::toPlainObject
+
+CALLBACKS
+-> eventAdd
+-> eventChange
+-> eventRemove
+eventsSet
+
+
+** Event Sources
+events (as an array)
+events (as a json feed)
+events (as a function)
+events from Google Calendar
+events from an iCalendar feed
+Event Source Object
+  id	Optional. Useful for getEventSourceById.
+  url	If a JSON feed or iCalendar feed, the specified URL
+  format	Specify 'json' for a JSON feed (the default) or 'ics' for an iCalendar feed
+  color	Sets every Event Object's color for this source.
+  backgroundColor	Sets every Event Object's backgroundColor for this source.
+  borderColor	Sets every Event Object's borderColor for this source.
+  textColor	Sets every Event Object's textColor for this source.
+  className	Sets every Event Object's className for this source.
+  editable	Sets every Event Object's editable for this source.
+  startEditable	Sets every Event Object's startEditable for this source.
+  durationEditable	Sets every Event Object's durationEditable for this source.
+  resourceEditable	Sets every Event Object's resourceEditable for this source.
+  display	Sets the eventDisplay setting for every event in this source.
+  overlap	Sets the eventOverlap setting for every event in this source. Does not accept a function.
+  constraint	Sets the eventConstraint setting for every event in this source.
+  allow	Sets the eventAllow setting for every event in this source.
+  defaultAllDay	Sets the defaultAllDay option, but only for this source.
+  success	Sets the eventSourceSuccess callback, but only for this source.
+  failure	Sets the eventSourceFailure callback, but only for this source.
+  eventDataTransform
+
+eventSources
+eventSourceSuccess
+eventSourceFailure
+initialEvents
+
+EVENT REQUESTING
+startParam
+endParam
+timeZoneParam
+lazyFetching
+-> loading
+
+METHODS
+Calendar::getEventSources
+Calendar::getEventSourceById
+Calendar::addEventSource
+Calendar::refetchEvents
+EventSource::refetch
+EventSource::remove
+
+
+** Event Display [customized thorugh JSON object?]
+eventColor (Event.color)
+eventBackgroundColor (Event.backgroundColor)
+eventBorderColor (Event.borderColor)
+eventTextColor (Event.textColor)
+eventDisplay (Event.display)
+eventTimeFormat
+displayEventTime
+displayEventEnd
+nextDayThreshold
+eventOrder
+eventOrderStrict
+progressiveEventRendering
+Event Render Hooks
+  eventClassNames
+  eventContent
+  eventDidMount
+  eventWillUnmount
+
+
+** Event Clicking & Hovering
+-> eventClick
+-> eventMouseEnter
+-> eventMouseLeave
+
+
+** Event Dragging & Resizing
+External Event Dragging
+Dragging Between Calendars
+Third-Party Dragging Libraries
+
+FLAGS
++ editable (Event.editable)
++ eventStartEditable (Event.startEditable)
++ eventResizableFromStart
++ eventDurationEditable (Event.durationEditable)
+eventResourceEditable (Event.resourceEditable)
+droppable
+
+EFFECTS
+eventDragMinDistance
+dragRevertDuration
+dragScroll
+snapDuration
+allDayMaintainDuration
+fixedMirrorParent
+
+CONTROL
+-> eventOverlap
+eventConstraint, group/businessHours
+-> eventAllow
+dropAccept
+
+CALLBACKS
+-> eventDragStart
+-> eventDragStop
+-> eventDrop (event change in time)
+drop
+eventReceive
+eventLeave
+-> eventResizeStart
+-> eventResizeStop
+-> eventResize (event change in duration)
+
+
+*/
 
 
     /*
