@@ -63,13 +63,14 @@ function fetchEvents(fetchInfo) {
     offset: 1,
     query: [
       {
-        [FIELDS.start]: `${getTimestampString(start)}...${getTimestampString(end)}`,
+        [FIELDS.start]: `< ${getTimestampString(end)}`,
+        [FIELDS.end]: `> ${getTimestampString(start)}`,
         [FIELDS.key]: `${id}`,
       },
-      {
-        [FIELDS.end]: `${getTimestampString(start)}...${getTimestampString(end)}`,
-        [FIELDS.key]: `${id}`,
-      },
+//      {
+//        [FIELDS.end]: `${getTimestampString(start)}...${getTimestampString(end)}`,
+//        [FIELDS.key]: `${id}`,
+//      },
     ],
   };
 
@@ -83,6 +84,7 @@ function fetchEvents(fetchInfo) {
     timeOut: 30000,
     scriptOption: 5
   });
+//  calendar.scrollToTime('8:00:00');
   return events;
 }
 /*
@@ -110,25 +112,25 @@ function getFieldName (table, field) {
   else return fieldName;
 }
 
-function formatEvent(event) {
-  //COLOR BASED ON STATUS = CONFIRMED | CANCELED | UNATTENDED | SUPPORT | EDITING
-  //DISPLAY BASED ON STATUS = SHUTDOWN
-  //NOT CONVERTED TO EVENT OBJECT YET
+function formatEvent(eventInfo) {
+  // COLOR BASED ON STATUS = CONFIRMED | CANCELED | UNATTENDED | SUPPORT | EDITING
+  // DISPLAY BASED ON STATUS = SHUTDOWN
+  // NOT CONVERTED TO EVENT OBJECT YET
 
- // if (event.status == "Shutdown" && event.notes){
-    // SET SHUTDOWN TITLE TO NOTES
-//    event.title = event.notes;
-//  }
-  formatting = EVENT_FORMAT[event.status] ? EVENT_FORMAT[event.status] : EVENT_FORMAT.default;
-  Object.assign(event, formatting);
 
-  return event;
+  formatting = EVENT_FORMAT[eventInfo.status] ? EVENT_FORMAT[eventInfo.status] : EVENT_FORMAT.default;
+  Object.assign(eventInfo, formatting);
+  if ( eventInfo.status == "EDITING" ) {
+    SETTINGS.CALENDAR.editing = true;
+    eventInfo.editable = true;
+  }
 
+  return eventInfo;
 };
 
 function createEvent(eventInfo) {
   // COMES FROM SELECT OR DATECLICK
-
+  // NOT CONVERTED TO EVENT OBJECT YET
 
   eventInfo.extendedProps = {
     person: SETTINGS.USER.id,
@@ -136,28 +138,18 @@ function createEvent(eventInfo) {
     status : EVENT_STATUS.normal,
     room: SETTINGS.CALENDAR.id,
     location : SETTINGS.CALENDAR.title,
-//    resources : eventInfo.resource?.id != null && eventInfo.resource?.id != SETTINGS.CALENDAR.id ? [{title : eventInfo.resource.title}] : null,
   };
 
-  //{"resource":{"id":"493F6ABB-76CE-4A1C-BE7F-FC2237453997","title":"STF.139"}
-
-
   // APPLY PRIMARY RESOURCE
-
-  eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
-//  console.log(JSON.stringify(eventInfo));
+  eventInfo.resourceIDs = [];
+  eventInfo.extendedProps.resources = [];
+  //DOESN'T KNOW ABOUT RESERVATIONS...
   if (eventInfo.resource?.id && eventInfo.resource.id != SETTINGS.CALENDAR.id) {
-    eventInfo.extendedProps.resources = [{title : eventInfo.resource.title, id: eventInfo.resource.id}];
-//    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id,eventInfo.resource.id];
+    eventInfo.extendedProps.resources.push({title : eventInfo.resource.title, uuid: eventInfo.resource.id});
     eventInfo.resourceIDs.push(eventInfo.resource.id);
-//    console.log(JSON.stringify(eventInfo.resourceIDs));
-//    console.log(eventInfo.resource.id);
-  } //else {
-//    eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
-//  }
-
-  // WHAT ABOUT APPLYING THE SOURCE VALUE?? https://fullcalendar.io/docs/Calendar-addEvent
-
+  }
+  eventInfo.resourceIDs.push(SETTINGS.CALENDAR.id);
+//  eventInfo.extendedProps.resources.push({id:SETTINGS.CALENDAR.id, title: SETTINGS.CALENDAR.title});
 
   if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
   let result = isValid(eventInfo);
@@ -186,71 +178,45 @@ function createEvent(eventInfo) {
 
 function newEvent() {
   // COMES FROM MODAL
-  // AFTER PASSING TESTS
+  // AFTER PASSING isValid
   let event = SETTINGS._EVENT.event;
   delete SETTINGS._EVENT;
-  
-//  event.extendedProps.status = EVENT_STATUS.normal;
-//  event.source = SETTINGS.CALENDAR.id;
-  event.start = getTimestampString(event.start);
-  event.end = getTimestampString(event.end);
 
-  event.notify = SETTINGS.USER.id != event.extendedProps.person;
-//  event.notify = notify;
+  calendar.addEvent( event, true );
+  // Triggers Calendar.eventAdd(addInfo)
 
-  /**
-   * NEW SELECTION CONFIRMED BY USER
-   * NEED TO VERIFY EVENT WITH FM:
-   *  ACCOUNT REQUIRED?
-   *  SSO STATUS? SHOULD I SEND Option.selectable = false if not an SSO User?
-   * 
-   * IN API.newEvent, if things are required, view event in FM
-   *  since FM calls refetch events, nothing to revert if canceled
-   *  does have to wait for completion so FM creates record with needed basic info before refetchEvents
-   * 
-   */
-
-//    calendar.addEvent( event, true );
-    // Triggers eventAdd(addInfo)
-
-    let param = {
-      method: API + ".newEvent",
-      config: { webviewer: WEBVIEWER, function: "refetchEvents" },
-      data: {
-        event: event
-      },
-    };
-    FileMaker.PerformScriptWithOption(
-      SCRIPT,
-      JSON.stringify(param),
-      5
-    );
-    calendar.unselect();
 };
 function deleteEvent(eventID) {
   calendar.getEventById(eventID).remove();
   // Triggers calendar.eventRemove(eventInfo) {event, relatedEvents, revert}
 }
-/*
-function revert_EVENT() {
-  SETTINGS._EVENT.revert(); 
-  delete SETTINGS._EVENT;
-}
-*/
+
 function updateEvent(eventID, notify) {
   //SETTINGS._EVENT HAS EVENT FOR REVERT
+  let event = SETTINGS._EVENT.event;
+  
+//console.log('update');
+  let eventInfo = JSON.parse(JSON.stringify(event.toPlainObject()));
+  let resources = event.getResources().filter(Boolean).map(function(resource) { return { uuid: resource.id, title: resource.title } });
+  resources.shift();
+
+  eventInfo.extendedProps.resources = resources;
+  event.setExtendedProp('resources', resources );
   delete SETTINGS._EVENT;
 
-  let event = calendar.getEventById(eventID);
-  //ONCE UPDATED, UPDATE POPOVER...
-  createPopover( {event: event, el: document.getElementById("popover."+eventID)} );
+  document.querySelectorAll(`[id="popover.${eventID}"]`).forEach((el) => {
+    createPopover( {event: eventInfo, el} );
+  });
 
-  //CAN ONLY CHANGE THE DATES ??
+  var resourceIds = event.getResources().filter(Boolean).map(function(resource) { return resource.id });
+  var key = [event.extendedProps.person].concat(resourceIds);
+
   let param = {
     method: API + ".eventChange",
     config: { webviewer: WEBVIEWER, function: "" },
-    data: { event: { ...event.toPlainObject(), start: getTimestampString(event.start), end: getTimestampString(event.end),
-      person: SETTINGS.USER.id, source: SETTINGS.CALENDAR.id }, notify: notify },
+    data: { event: { ...eventInfo, start: getTimestampString(event.start), end: getTimestampString(event.end), notify: notify,
+      key : key
+     } },
   };
   FileMaker.PerformScriptWithOption(
     SCRIPT,
@@ -262,17 +228,13 @@ function viewEvent(eventID) {
   let event;
   if ( !eventID ) {
     event = SETTINGS._EVENT.event;
+    delete SETTINGS._EVENT;
     event.start = getTimestampString(event.start);
     event.end = getTimestampString(event.end);
-//    event.person = SETTINGS.USER.id;
-//    event.source = SETTINGS.CALENDAR.id;
-delete SETTINGS._EVENT;
 
   } else {
     event = calendar.getEventById(eventID);
   }
-  
-  
 
   let param = {
     method: API + ".eventClick",
@@ -284,15 +246,14 @@ delete SETTINGS._EVENT;
     JSON.stringify(param),
     5
   );
-  calendar.unselect();
 };
 function eventUpdated(success){
+//CALLED AFTER EVENT VERIFY IN FM??
   if (success != true) {
     SETTINGS._EVENT.revert(); 
   }
   delete SETTINGS._EVENT;
 }
-
 
 function createPopover(arg) {
 //  { event, el }
@@ -309,6 +270,9 @@ function createPopover(arg) {
     </div>
     <div class="small">${name}</div>`;
 
+//console.log(event.start);
+//console.log(event.end);
+
   let rangeFormat = {
     hour: "numeric",
     minute: "2-digit"
@@ -318,7 +282,8 @@ function createPopover(arg) {
       month: "numeric",
       day: "2-digit"
     };
-  } else if (event.start.getDate() != event.end.getDate()) {
+//  } else if (event.start.getDate() != event.end.getDate()) {
+    } else if (getDate(event.start) != getDate(event.end)) {
     rangeFormat = {
       ...rangeFormat,
       month: "numeric",
@@ -328,18 +293,26 @@ function createPopover(arg) {
   let range = `<div>${calendar.formatRange(event.start, event.end, rangeFormat)}</div>`;
 
   let resources = "";
+//  console.log(event.extendedProps?.resources);
+//  let resource = arg.resources ?? event.extendedProps?.resources;
   if (event.extendedProps?.resources?.length ?? false) {
-    event.extendedProps.resources.forEach((resource) => {
-      resources += `<li>${resource.title}</li>`;
+    event.extendedProps.resources.forEach((element) => {
+      resources += `<li>${element.title}</li>`;
     });
     resources = `<div class="mt-2">Resources:
     <ul>${resources}</ul></div>`;
   };
 
+  let notes = "";
+  if (event.extendedProps?.notes) {
+    notes = `<div>Notes: <em>${event.extendedProps.notes}</em></div>`
+  }
+  
   const content = `
     <div><strong>${event.extendedProps.status}</strong></div>
     ${range}
-    ${resources}`;
+    ${resources}
+    ${notes}`;
   /*
     Object.assign( arg.el, {
       [data-bs-toggle] : "popover",
@@ -350,6 +323,10 @@ function createPopover(arg) {
       [title] : `<div class="d-flex justify-content-between"><div>${event.title}</div>${edit}</div>`
     });
   */
+
+  let popover = bootstrap.Popover.getInstance(arg.el);
+  if ( popover ) popover.dispose();
+
   arg.el.setAttribute("id", "popover."+event.id);
   arg.el.setAttribute("data-bs-toggle", "popover");
   arg.el.setAttribute("data-bs-trigger", "hover");
@@ -358,7 +335,7 @@ function createPopover(arg) {
   arg.el.setAttribute("data-bs-content", content);
   arg.el.setAttribute("data-bs-title", title);
 
-  new bootstrap.Popover(arg.el);
+  bootstrap.Popover.getOrCreateInstance(arg.el);
 };
 function showModal(eventInfo) {
 
@@ -408,12 +385,12 @@ function showModal(eventInfo) {
     event.extendedProps.resources.forEach((resource) => {
       resources += `<li>${resource.title}</li>`;
     });
-    resources = `<div class="mt-2">Resources:
+    resources = `<div class="popover-label-sm mt-2">Resources:
     <ul>${resources}</ul></div>`;
   };
 
   let notes = event.extendedProps?.notes ? `
-    <div class="popover-label-sm mt-2">Notes</div>
+    <div class="popover-label-sm mt-2">Notes:
     <div class="popover-notes mb-2"><em>${event.extendedProps.notes}</em></div>
     ` : "";
 

@@ -2,7 +2,7 @@ const EXIT_SUCCESS = { response: true, message: "OK" };
 const EXIT_FAILURE = { response: false };
 
 function isValid(event) {
-// {start, end, extendedProps.person, extendedProps.status}
+  // {start, end, extendedProps.person, extendedProps.status}
   let isDuration = isValidDuration(event);
   if (!isDuration.response) return isDuration;
 
@@ -29,13 +29,17 @@ function isValid(event) {
   let isUnderHours = isUnderUserHours(event);
   if (!isUnderHours.response) return isUnderHours;
 
+  let isResourceActive = isActiveResource(event);
+//  console.log(isResourceActive);
+  if (!isResourceActive.response) return isResourceActive;
+
   return EXIT_SUCCESS;
 }
 
 
 // START AND MINIMUM ARE ALWAYS ENFORCED
 // BUSINESSHOURS, END, AND MAXIMUM ARE IGNORED FOR PERSON = EXTENDED HOURS OR USER = ADMIN
-function isValidDuration (event) {
+function isValidDuration(event) {
   EXIT_FAILURE.message = `Reservation end must be after it starts`;
   return { ...EXIT_FAILURE, response: event.start < event.end };
 }
@@ -187,7 +191,7 @@ function isUnderUserHours(event) {
   // IGNORE FOR UNATTENDED RESERVATIONS ??
   if (event.extendedProps?.status == EVENT_STATUS.unattended) return EXIT_SUCCESS;
 
-//  const newEventDuration = event.end.getTime() - event.start.getTime();
+  //  const newEventDuration = event.end.getTime() - event.start.getTime();
   const maxDuration = userHours * 60 * 60 * 1000; //hoursToMilliseconds(userHours);
   const eventMilliseconds = event.end.getTime() - event.start.getTime();
 
@@ -232,6 +236,46 @@ function isUnderMaxUsers(event) {
   });
 
   return { ...EXIT_FAILURE, response: Math.max(userTotals) <= maxUsers };
+}
+
+function isActiveResource(event) {
+  const EXIT_FAILURE = { response: false, message: `Resource is not currently active` };
+//  return EXIT_SUCCESS;
+//console.log(event.resource);
+  if (!event.resource) return EXIT_SUCCESS;
+  
+  return { ...EXIT_FAILURE, response: event.resource?.extendedProps?.status != 'Inactive' };
+}
+
+function getOverappingUsers(event) {
+  let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
+
+  const overlappingEvents = calendar.getEvents().filter((element) => {
+    return (
+      element.end > event.start && element.start < event.end &&
+      element.id !== event.id &&
+      element.extendedProps.person !== person &&
+      element.extendedProps.status !== EVENT_STATUS.unattended
+    );
+  });
+
+  let userList = [person];
+  overlappingEvents.forEach((element) => {
+    //    let userCount = [person];
+
+    //    let overlap = { start: new Date(Math.max(event.start, element.start)), end: new Date(Math.min(event.end, element.end)) };
+    if (!userCount.includes(element.extendedProps.person)) userList.push(element.extendedProps.person);
+    /*
+        for (i = index + 1; i < array.length; i++) {
+          let compare = array[i];
+    
+          if (!userCount.includes(compare.extendedProps.person) && getEventOverlap(overlap, compare)) userCount.push(compare.extendedProps.person);
+        }
+        userTotals[index] = userCount.length;
+    */
+  });
+  if (userList.length > 1) return userList;
+  return '';
 }
 
 function getEventDays(event) {
@@ -364,7 +408,7 @@ function hideWarning() {
 
 function getDate(string) {
   let date = new Date(string);
-  if ( string && date instanceof Date && !isNaN(date) ) return date;
+  if (string && date instanceof Date && !isNaN(date)) return date;
   return null;
 }
 function getTimestampString(date) {

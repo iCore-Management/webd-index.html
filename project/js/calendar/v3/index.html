@@ -55,7 +55,6 @@
         window[settings.function](JSON.stringify(settings.options));
       }
       init({ active: true, });
-
     }
 
   </script>
@@ -131,8 +130,8 @@
       Settings.calendar.extendedHours = extendedHours;
       Settings.user = { ...Settings.user, access: admins.includes(Settings.user.id) ? 'admin' : access };
       // ADMIN/ EXTENDEDHOURS IGNORES open/close, userHours, maxTime, businessHours
-
-      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
+//      Settings.query.table = "";
+//      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
 
       if ( !Array.isArray(Settings.sources) ) Settings.sources = [];
       Options.resources = [];
@@ -140,10 +139,16 @@
         Options.resources = Settings.calendar.resources?.map((row) => ({
           ...row,
           parentId: Settings.calendar.id,
+//          eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent), //RETURN BOOLEAN
         })
         );
       }
       Options.resources.push({ id: Settings.calendar.id, title: Settings.calendar.title });
+      /* businessHours: {
+        startTime: '6:00',
+        endTime: '6:00',
+        daysOfWeek: [ ] // Mon,Wed,Fri
+      }*/
 
       /** RESERVATION WINDOW
        * 
@@ -211,7 +216,7 @@
       SETTINGS.SOURCES = Settings.sources;
       SETTINGS.CALENDAR = Settings.calendar;
       SETTINGS.QUERY = Settings.query;
-
+//      SETTINGS.RESOURCES = Options.resources;
 
       /** FULLCALENDAR.IO
        * Set Up Calendar with functions => Calendar.js
@@ -601,7 +606,8 @@
         })
       );
       show(true);
-      calendar.render();
+      calendar.render(); //.scrollToTime('8:00');
+//      setTimeout(function() { calendar.scrollToTime('8:00'); });
     };
 
     function changeView(view, date) {
@@ -640,9 +646,23 @@
         5
       );
     };
+    function getOverlappingPersons(event) {
+      let newEvent = eventDataTransform(JSON.parse(event));
+      let response = getOverappingUsers(newEvent);
+
+      let param = {
+        method: API + '.getOverlappingPersons',
+        config: { webviewer: WEBVIEWER, function: '' },
+        data: response,
+      };
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
+    }
 
   </script>
-
 </body>
 
 </html>

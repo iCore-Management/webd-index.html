@@ -8,12 +8,13 @@
  * https://fullcalendar.io/docs/date-clicking-selecting
  */
 function selectOverlap(event) {
-  // NOT WORKING IN SCHEDULER
+  // NOT WORKING IN SCHEDULER 6.1.15
   // SENT SERIALLY FOR EACH OVERLAPPING EVENT
+//  console.log ('overlap');
   if (event.extendedProps.status == "Support") {
     toaster("Warning: Overlapping support reservation");
   }
-  if (event.extendedProps.status == "Shutdown") {
+  else if (event.extendedProps.status == "Shutdown") {
     //!!! CHECK IF SHUTDOWN EVENT RESOURCES IS NULL OR FOR SPECIFIC RESOURCE
   }
   return event.extendedProps.status != "Shutdown";
@@ -86,6 +87,9 @@ function eventDataTransform(eventData) {
       title: row[FIELDS.resource]
     }));
   };
+  delete event._resourcesPortal;
+  delete event.resourceId;
+  delete event.resource;
   event.resourceIds.push(SETTINGS.CALENDAR.id);
 //  event.resources.push({id:SETTINGS.CALENDAR.id, title: SETTINGS.CALENDAR.title});
 
@@ -126,6 +130,7 @@ function eventAdd(eventInfo) {
 }
 function eventChange(eventInfo) {
   //https://fullcalendar.io/docs/eventChange
+  let event = SETTINGS._EVENT;
   SETTINGS._EVENT = eventInfo;
   if (SETTINGS.USER.id != eventInfo.event.extendedProps.person) {
     //CREATE MODAL CONFIRMATION
@@ -136,7 +141,8 @@ function eventChange(eventInfo) {
       <button type="button" onclick="updateEvent('${eventInfo.event.id}',true)" class="btn btn-secondary" data-bs-dismiss="modal">Confirm and Notify</button>
       <button type="button" onclick="updateEvent('${eventInfo.event.id}')" class="btn btn-primary" data-bs-dismiss="modal">Confirm</button>`;
     showModal(eventInfo);
-  } else {
+  } else if ( !event ) {
+//    console.log(eventInfo);
     updateEvent(eventInfo.event.id);
   }
 };
@@ -188,6 +194,11 @@ async function events(fetchInfo, successCallback, failureCallback) {
   }
 }
 function eventSourceSuccess(rawEvents, response) {
+  //ALSO HAS LAYOUT TABLE DATA HERE...rawEvents.response.dataInfo.table
+  if ( !SETTINGS.QUERY.table ) {
+    SETTINGS.QUERY.table = rawEvents.response.dataInfo.table;
+    SETTINGS.QUERY.fields = getEventFields(SETTINGS.QUERY.table, SETTINGS.QUERY.fields);
+  }
   return rawEvents.response.data;
 }
 function eventSourceFailure(messages) { }
@@ -299,7 +310,7 @@ function eventClick(eventInfo) {
   bootstrap.Popover.getInstance(eventInfo.el).hide();
 
   eventInfo.title = eventInfo.event.title;
-  eventInfo.footer = eventInfo.event.startEditable || eventInfo.event.durationEditable ? `
+  eventInfo.footer = !SETTINGS.CALENDAR.editing && ( eventInfo.event.startEditable || eventInfo.event.durationEditable ) ? `
     <button id="eventDelete" onclick="deleteEvent('${eventInfo.event.id}')" type="button" class="btn btn-danger" data-bs-dismiss="modal">Delete</button>
     <button id="eventEdit" onclick="viewEvent('${eventInfo.event.id}')" type="button" class="btn btn-primary" data-bs-dismiss="modal">Edit</button>
   ` : "";
@@ -361,8 +372,11 @@ function eventAllow(dropInfo, draggedEvent) {
   var newEvent = draggedEvent.toPlainObject();
   newEvent.start = new Date(dropInfo.start);
   newEvent.end = new Date(dropInfo.end);
+  newEvent.resource = dropInfo.resource;
 
-  // DOES PLAIN OBJECT RETRAIN CONSTRAINT??
+//  console.log(dropInfo.resource.extendedProps);
+//  console.log(draggedEvent);
+  // DOES PLAIN OBJECT RETAIN CONSTRAINT??
   let result = isValid(newEvent);
 //  console.log(result);
   if (!result.response) {
