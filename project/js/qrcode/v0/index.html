@@ -1,0 +1,53 @@
+<!DOCTYPE HTML><HEAD>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Barcode</title>
+
+  <STYLE></STYLE>
+
+  <script src="qrcode.js"></script>
+  <SCRIPT>
+
+  const urlParams = new URLSearchParams(globalThis.location.search);
+  var script = urlParams.get("script");
+  
+  var text = decodeURI(urlParams.get("text"));
+
+  var typeNumber = urlParams.get("typeNumber");
+  var errorCorrectionLevel = urlParams.get("errorCorrection");
+  var margin = urlParams.get("margin");
+  var cellSize = urlParams.get("cellSize");
+
+  </SCRIPT>
+
+</HEAD><BODY>
+<DIV id="qrcode"></DIV>
+</BODY>
+<SCRIPT>
+function setQRCode () {
+
+    var qr = qrcode(typeNumber, errorCorrectionLevel);
+    qr.addData(text);
+    qr.make();
+
+    var param = {
+	    action : "Set QR Code",
+	    img : qr.createImgTag(cellSize, margin)
+    };
+
+    let checkFMInterval = setInterval(() => {
+      if (window.FileMaker) {
+        clearInterval(checkFMInterval);
+
+        FileMaker.PerformScriptWithOption(
+        script,
+        JSON.stringify(param),
+        5
+        );
+        }
+    }, 100);
+
+}
+</SCRIPT>
+</HTML>

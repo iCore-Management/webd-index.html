@@ -63,14 +63,13 @@ function fetchEvents(fetchInfo) {
     offset: 1,
     query: [
       {
-        [FIELDS.start]: `< ${getTimestampString(end)}`,
-        [FIELDS.end]: `> ${getTimestampString(start)}`,
+        [FIELDS.start]: `${getTimestampString(start)}...${getTimestampString(end)}`,
         [FIELDS.key]: `${id}`,
       },
-//      {
-//        [FIELDS.end]: `${getTimestampString(start)}...${getTimestampString(end)}`,
-//        [FIELDS.key]: `${id}`,
-//      },
+      {
+        [FIELDS.end]: `${getTimestampString(start)}...${getTimestampString(end)}`,
+        [FIELDS.key]: `${id}`,
+      },
     ],
   };
 
@@ -84,7 +83,6 @@ function fetchEvents(fetchInfo) {
     timeOut: 30000,
     scriptOption: 5
   });
-//  calendar.scrollToTime('8:00:00');
   return events;
 }
 /*
@@ -112,82 +110,55 @@ function getFieldName (table, field) {
   else return fieldName;
 }
 
-function formatEvent(eventInfo) {
-  // COLOR BASED ON STATUS = CONFIRMED | CANCELED | UNATTENDED | SUPPORT | EDITING
-  // DISPLAY BASED ON STATUS = SHUTDOWN
-  // NOT CONVERTED TO EVENT OBJECT YET
+function formatEvent(event) {
+  //COLOR BASED ON STATUS = CONFIRMED | CANCELED | UNATTENDED | SUPPORT | EDITING
+  //DISPLAY BASED ON STATUS = SHUTDOWN
+  //NOT CONVERTED TO EVENT OBJECT YET
 
+ // if (event.status == "Shutdown" && event.notes){
+    // SET SHUTDOWN TITLE TO NOTES
+//    event.title = event.notes;
+//  }
+  formatting = EVENT_FORMAT[event.status] ? EVENT_FORMAT[event.status] : EVENT_FORMAT.default;
+  Object.assign(event, formatting);
 
-  formatting = EVENT_FORMAT[eventInfo.status] ? EVENT_FORMAT[eventInfo.status] : EVENT_FORMAT.default;
-  Object.assign(eventInfo, formatting);
-  if ( eventInfo.status == "EDITING" ) {
-    SETTINGS.CALENDAR.editing = true;
-    eventInfo.editable = true;
-  }
+  return event;
 
-  return eventInfo;
 };
 
 function createEvent(eventInfo) {
-  /**
-   * Triggered from Calendar:select or Calendar:dateClick
-   * {start, end, allDay, jsEvent, view, resource*}
-   * Not Converted to Event Object yet
-   * 
-   * Validate Event
-   * Confirm with User
-   *  ->viewEvent
-   *  ->newEvent
-   * 
-   */
+  // COMES FROM SELECT OR DATECLICK
 
-  // FORMAT EVENT FOR isValid
-  // {start, end, extendedProps.person, extendedProps.status, resource{id,extendedProps.status}}
-  let event = {
-    start: eventInfo.start,
-    end: eventInfo.end,
-    resource: eventInfo.resource,
-    extendedProps: {
-      person : SETTINGS.USER.id,
-      status : EVENT_STATUS.normal,
+  eventInfo.extendedProps = {
+    person: SETTINGS.USER.id,
+    name: SETTINGS.USER.name,
+    status : EVENT_STATUS.normal,
+    room: SETTINGS.CALENDAR.id,
+    location : SETTINGS.CALENDAR.title,
+  };
 
-      // FORMAT FOR ADDEVENT
-      room : SETTINGS.CALENDAR.id, //person or room?? CALENDAR?
-//      name : SETTINGS.USER.name,
-      resourceUUIDs : [],
-    },
-    resourceIds: [],
-    title: SETTINGS.CALENDAR.title,
-  }
-
-  let result = isValid(event);
-  if (!result.response || result.message != 'OK') {
-    toaster(result.message);
-    if (!result.response) return result.response;
-  } else if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
-
-  // FORMAT FOR ADDEVENT
-  if (event.resource?.id && event.resource.id != SETTINGS.CALENDAR.id) {
-    event.resourceIds.push(event.resource.id);
-    event.extendedProps.resourceUUIDs.push(event.resource.id);
-  }
   // APPLY PRIMARY RESOURCE
-  event.resourceIds.push(SETTINGS.CALENDAR.id); //person or room?
-//  event.extendedProps.room = SETTINGS.CALENDAR.id;
+  eventInfo.resourceIDs = [SETTINGS.CALENDAR.id];
 
-  SETTINGS._EVENT = { event };
+  if (eventInfo.resource?.id && eventInfo.resource.id != SETTINGS.CALENDAR.id) {
+    eventInfo.extendedProps.resources = [{title : eventInfo.resource.title, id: eventInfo.resource.id}];
+
+    eventInfo.resourceIDs.push(eventInfo.resource.id);
+  }
+
+  if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
+  let result = isValid(eventInfo);
+  if (!result.response) {
+    toaster(result.message);
+    return false;
+  }
+
+  // DEEP COPY
+  SETTINGS._EVENT = { event: JSON.parse(JSON.stringify(eventInfo)) };
   // REMOVE STATUS FOR MODAL
+  eventInfo.extendedProps.status = "";
   let modal = {
-    event : {
-      ...event,
-      status: '',
-      extendedProps: {
-  //      title: SETTINGS.CALENDAR.title, //name or location??
-        name : SETTINGS.USER.name,
-        location : SETTINGS.CALENDAR.title, //name or location??
-        resources : [ eventInfo.resource ],
-      }
-    },
+    event : eventInfo,
 
     title: "Confirm New Event",
     close : `onclick="calendar.unselect()"`,
@@ -201,195 +172,57 @@ function createEvent(eventInfo) {
 }
 
 function newEvent() {
-  /**
-   * Comes from createEvent Modal
-   * Passed validation
-   * 
-   * not an Event Object yet
-   * 
-   */
+  // COMES FROM MODAL
+  // AFTER PASSING TESTS
   let event = SETTINGS._EVENT.event;
   delete SETTINGS._EVENT;
+  
+  event.start = getTimestampString(event.start);
+  event.end = getTimestampString(event.end);
 
+  event.notify = SETTINGS.USER.id != event.extendedProps.person;
 
+//    calendar.addEvent( event, true );
+    // Triggers eventAdd(addInfo)
 
-  calendar.addEvent( event, true );
-  // Triggers Calendar.eventAdd(addInfo)
-  // => addEvent
-
-};
-function addEvent(addInfo) {
-  /**
-   * Comes from newEvent -> eventAdd
-   * { event, relatedEvents, revert }
-   * 
-   * Event Object
-   */
-
-  let event = addInfo.event.toPlainObject();
-  let notify = SETTINGS.USER.id != event.extendedProps.person;
-  /**
-   * EVENT: {
-      *start
-      *end
-      title
-
-      extendedProps: {
-        *person
-        *room
-        *resourceUUIDs
-
-        *name ?
-        *location ?
-        *status
-        resources {}
-//        key = source (sources)
-
-        account = Task
-        notes = notes
-
-        supervisor
-        creator
-
-      }
-
-      }
-   */
-
-  // VERIFY EVENT IN FM and Create
-  let param = {
-    method: API + ".newEvent",
-    config: { webviewer: WEBVIEWER, function: "refetchEvents" },
-    data: {
-      event: {
-        ...event, 
-        start: getTimestampString(event.start), 
-        end: getTimestampString(event.end),
+    let param = {
+      method: API + ".newEvent",
+      config: { webviewer: WEBVIEWER, function: "refetchEvents" },
+      data: {
+        event: event
       },
-      notify
-    },
-  };
-  FileMaker.PerformScriptWithOption(
-    SCRIPT,
-    JSON.stringify(param),
-    5
-  );
-}
-
+    };
+    FileMaker.PerformScriptWithOption(
+      SCRIPT,
+      JSON.stringify(param),
+      5
+    );
+    calendar.unselect();
+};
 function deleteEvent(eventID) {
   calendar.getEventById(eventID).remove();
-  // Triggers calendar.eventRemove(eventInfo) 
-  // => removeEvent
+  // Triggers calendar.eventRemove(eventInfo) {event, relatedEvents, revert}
 }
-function removeEvent(removeInfo) {
-  // {event, relatedEvents, revert}
-
-  let event = removeInfo.event.toPlainObject();
-  let notify = SETTINGS.USER.id != event.extendedProps.person;
-
-  let param = {
-    method: API + ".eventRemove",
-    config: { webviewer: WEBVIEWER, function: "" },
-    data: { event , notify },
-  };
-  FileMaker.PerformScriptWithOption(
-    SCRIPT,
-    JSON.stringify(param),
-    5
-  );
-}
-
-function changeEvent (changeInfo) {
-  /**
-   * comes from calendar.eventChange()
-   * { event, relatedEvents, oldEvent, revert }
-   * 
-   * Event Object
-   * Already Passed (eventOverlap, eventAllow)
-   * 
-   */
-  let eventInfo = changeInfo;
-
-//  let event = SETTINGS._EVENT; //??
-  SETTINGS._EVENT = eventInfo;
-  if (SETTINGS.USER.id != eventInfo.event.extendedProps.person) {
-    //CREATE MODAL CONFIRMATION
-    eventInfo.title = "Confirm Update";
-    eventInfo.close = `onclick="eventUpdated(false)"`;
-    eventInfo.footer = `
-      <button type="button" onclick="eventUpdated(false)" class="btn btn-warning" data-bs-dismiss="modal">Cancel</button>
-      <button type="button" onclick="updateEvent('${eventInfo.event.id}',true)" class="btn btn-secondary" data-bs-dismiss="modal">Confirm and Notify</button>
-      <button type="button" onclick="updateEvent('${eventInfo.event.id}')" class="btn btn-primary" data-bs-dismiss="modal">Confirm</button>`;
-    showModal(eventInfo);
-
-  } else {
-    //    console.log(eventInfo);
-    updateEvent(eventInfo.event.id);
-  }
-}
-
-function updateEvent(eventID, notify) {
-  /**
-   * comes from changeEvent() modal
-   * SETTINGS._EVENT = { event, relatedEvents, oldEvent, revert }
-   * 
-   * Event Object
-   * Already Passed (eventOverlap, eventAllow)
-   * 
-   */
-
-  //SETTINGS._EVENT HAS EVENT FOR REVERT
-  //{ event, relatedEvents, oldEvent, revert }
-//  let event = SETTINGS._EVENT.event;
-//  let resources = SETTINGS._EVENT.event.getResources().filter(Boolean).map(function(resource) { return { id: resource.id, title: resource.title } });
-  
-//  resourceIds = resources.filter(Boolean).map(function(resource) { return resource.id });
-  resourceIds = SETTINGS._EVENT.event.getResources().filter(Boolean).map(function(resource) { return resource.id });
-  // REMOVE ROOM RESOURCE ID
-  resourceIds.shift();
-
-//  eventInfo.extendedProps.resources = resources;
-//  event.setExtendedProp('resources', resources );
-let event = SETTINGS._EVENT.event.toPlainObject();
-event.extendedProps.resourceUUIDs = resourceIds;
 /*
-let event = {
-  start: eventInfo.start,
-  end: eventInfo.end,
-//  resource: eventInfo.resource,
-//  title: SETTINGS.CALENDAR.title, //name or location??
-  extendedProps: {
-//    person : SETTINGS.USER.id, ALREADY SET
-    status : EVENT_STATUS.normal,
-
-    // FORMAT EVENT FOR MODAL
-//    name : SETTINGS.USER.name,
-//    location : SETTINGS.CALENDAR.title, //name or location??
- //   resources : [ eventInfo.resource ],
-
-    // FORMAT FOR ChangeEVENT
-//    room : SETTINGS.CALENDAR.id, //person or room??  ALREADY SET
-    resourceUUIDs : resourceIds,
-  },
-//  resourceIds: [],
+function revert_EVENT() {
+  SETTINGS._EVENT.revert(); 
+  delete SETTINGS._EVENT;
 }
 */
-delete SETTINGS._EVENT;
-document.querySelectorAll(`[id="popover.${eventID}"]`).forEach((el) => {
-  createPopover( {event: event, el} );
-});
+function updateEvent(eventID, notify) {
+  //SETTINGS._EVENT HAS EVENT FOR REVERT
+  delete SETTINGS._EVENT;
 
+  let event = calendar.getEventById(eventID);
+  //ONCE UPDATED, UPDATE POPOVER...
+  createPopover( {event: event, el: document.getElementById("popover."+eventID)} );
+
+  //CAN ONLY CHANGE THE DATES ??
   let param = {
     method: API + ".eventChange",
     config: { webviewer: WEBVIEWER, function: "" },
-    data: { event: { 
-      ...event, 
-      start: getTimestampString(event.start), 
-      end: getTimestampString(event.end), 
-//      notify: notify,
-//      key : key
-     },
-    notify: notify },
+    data: { event: { ...event.toPlainObject(), start: getTimestampString(event.start), end: getTimestampString(event.end),
+      person: SETTINGS.USER.id, source: SETTINGS.CALENDAR.id }, notify: notify },
   };
   FileMaker.PerformScriptWithOption(
     SCRIPT,
@@ -397,37 +230,41 @@ document.querySelectorAll(`[id="popover.${eventID}"]`).forEach((el) => {
     5
   );
 };
-
 function viewEvent(eventID) {
   let event;
   if ( !eventID ) {
     event = SETTINGS._EVENT.event;
-    delete SETTINGS._EVENT;
+    event.start = getTimestampString(event.start);
+    event.end = getTimestampString(event.end);
+//    event.person = SETTINGS.USER.id;
+//    event.source = SETTINGS.CALENDAR.id;
+delete SETTINGS._EVENT;
+
   } else {
     event = calendar.getEventById(eventID);
   }
-  event.start = getTimestampString(event.start);
-  event.end = getTimestampString(event.end);
+  
+  
 
   let param = {
     method: API + ".eventClick",
     config: { webviewer: WEBVIEWER, function: "refetchEvents" },
-    data: { event },
+    data: { event: event },
   };
   FileMaker.PerformScriptWithOption(
     SCRIPT,
     JSON.stringify(param),
     5
   );
+  calendar.unselect();
 };
 function eventUpdated(success){
-//CALLED AFTER EVENT VERIFY IN FM??
-//{response, message} ??
   if (success != true) {
     SETTINGS._EVENT.revert(); 
   }
   delete SETTINGS._EVENT;
 }
+
 
 function createPopover(arg) {
 //  { event, el }
@@ -444,9 +281,6 @@ function createPopover(arg) {
     </div>
     <div class="small">${name}</div>`;
 
-//console.log(event.start);
-//console.log(event.end);
-
   let rangeFormat = {
     hour: "numeric",
     minute: "2-digit"
@@ -456,8 +290,7 @@ function createPopover(arg) {
       month: "numeric",
       day: "2-digit"
     };
-//  } else if (event.start.getDate() != event.end.getDate()) {
-    } else if (getDate(event.start) != getDate(event.end)) {
+  } else if (event.start.getDate() != event.end.getDate()) {
     rangeFormat = {
       ...rangeFormat,
       month: "numeric",
@@ -466,11 +299,8 @@ function createPopover(arg) {
   };
   let range = `<div>${calendar.formatRange(event.start, event.end, rangeFormat)}</div>`;
 
-//  let resources = "";
-//  console.log(event.extendedProps?.resources);
-//  let resource = arg.resources ?? event.extendedProps?.resources;
-  let resources = '';
-  if (event.extendedProps.resources?.[0] ?? false) {
+  let resources = "";
+  if (event.extendedProps?.resources?.length ?? false) {
     event.extendedProps.resources.forEach((resource) => {
       resources += `<li>${resource.title}</li>`;
     });
@@ -478,16 +308,10 @@ function createPopover(arg) {
     <ul>${resources}</ul></div>`;
   };
 
-  let notes = "";
-  if (event.extendedProps?.notes) {
-    notes = `<div>Notes: <em>${event.extendedProps.notes}</em></div>`
-  }
-  
   const content = `
     <div><strong>${event.extendedProps.status}</strong></div>
     ${range}
-    ${resources}
-    ${notes}`;
+    ${resources}`;
   /*
     Object.assign( arg.el, {
       [data-bs-toggle] : "popover",
@@ -498,10 +322,6 @@ function createPopover(arg) {
       [title] : `<div class="d-flex justify-content-between"><div>${event.title}</div>${edit}</div>`
     });
   */
-
-  let popover = bootstrap.Popover.getInstance(arg.el);
-  if ( popover ) popover.dispose();
-
   arg.el.setAttribute("id", "popover."+event.id);
   arg.el.setAttribute("data-bs-toggle", "popover");
   arg.el.setAttribute("data-bs-trigger", "hover");
@@ -510,7 +330,7 @@ function createPopover(arg) {
   arg.el.setAttribute("data-bs-content", content);
   arg.el.setAttribute("data-bs-title", title);
 
-  bootstrap.Popover.getOrCreateInstance(arg.el);
+  new bootstrap.Popover(arg.el);
 };
 function showModal(eventInfo) {
 
@@ -555,17 +375,17 @@ function showModal(eventInfo) {
 
   let account = event.extendedProps?.account ? `<div class="mt-1">Charge Code: ${event.extendedProps.account}</div>` : "";
 
-  let resources = '';
-  if (event.extendedProps.resources?.[0] ?? false) {
+  let resources = "";
+  if (event.extendedProps?.resources?.length ?? false) {
     event.extendedProps.resources.forEach((resource) => {
       resources += `<li>${resource.title}</li>`;
     });
-    resources = `<div class="popover-label-sm mt-2">Resources:
+    resources = `<div class="mt-2">Resources:
     <ul>${resources}</ul></div>`;
   };
 
   let notes = event.extendedProps?.notes ? `
-    <div class="popover-label-sm mt-2">Notes:
+    <div class="popover-label-sm mt-2">Notes</div>
     <div class="popover-notes mb-2"><em>${event.extendedProps.notes}</em></div>
     ` : "";
 

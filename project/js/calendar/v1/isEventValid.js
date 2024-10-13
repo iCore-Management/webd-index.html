@@ -2,68 +2,41 @@ const EXIT_SUCCESS = { response: true, message: "OK" };
 const EXIT_FAILURE = { response: false };
 
 function isValid(event) {
-  // {start, end }
+// {start, end, extendedProps.person, extendedProps.status}
   let isDuration = isValidDuration(event);
   if (!isDuration.response) return isDuration;
 
   let isAfterStart = isEventAfterStart(event);
   if (!isAfterStart.response) return isAfterStart;
 
-  let isBeforeEnd = isEventBeforeEnd(event);
-  if (!isBeforeEnd.response) return isBeforeEnd;
-
   let isAboveMinimum = isEventAboveMinimum(event);
   if (!isAboveMinimum.response) return isAboveMinimum;
 
-  let isBelowMaximum = isEventBelowMaximum(event);
-  if (!isBelowMaximum.response) return isBelowMaximum;
+  let isBeforeEnd = isEventBeforeEnd(event);
+  if (!isBeforeEnd.response) return isBeforeEnd;
 
-    // CURRENTLY IN EVENT CONSTRAINT AND SELECT CONSTRAINT FOR USERS ( = 'businessHours' )
+  let isUnderMax = isUnderMaxUsers(event);
+  if (!isUnderMax.response) return isUnderMax;
+
+  // CURRENTLY IN EVENT CONSTRAINT AND SELECT CONSTRAINT FOR USERS ( = 'businessHours' )
   // NEEDS TO VALIDATE FOR NEW FM EVENTS
   let isDuringBusinessHours = isEventDuringBusinessHours(event);
   if (!isDuringBusinessHours.response) return isDuringBusinessHours;
 
-  // { extendedProps.person, extendedProps.status }
-  let isUnderMax = isUnderMaxUsers(event);
-  if (!isUnderMax.response) return isUnderMax;
+  let isBelowMaximum = isEventBelowMaximum(event);
+  if (!isBelowMaximum.response) return isBelowMaximum;
 
   let isUnderHours = isUnderUserHours(event);
   if (!isUnderHours.response) return isUnderHours;
 
-  // { resource }
-  let isResourceActive = isActiveResource(event);
-  if (!isResourceActive.response) return isResourceActive;
-
-  let isActiveUserResource = isUserResource(event);
-  if (!isActiveUserResource.response) return isActiveUserResource;
-
-//  let isOverlappingSupport = isOverlappingSupportEvent(event); //DOESN'T CANCEL EVENT... SENDS MESSAGE{response:true,message:'There is scheduled in the lab at this time'}
-  /**
-   * Check if support reservation has same resource id ( not room ), or empty resource ids ( whole room )
-   * What about shutdowns, preventing the event {response:false,}
-   * 
-   * {response}
-   * There is an overlapping activity
-   * There is an overlapping support activity
-   */
-
-  /**
-   * FILEMAKER VALIDATION
-   * 
-   * _isChargeable (Reservations)
-   * _isValidChargeCode (Tasks)
-   * _isQualified (Competency, Proficiency, Qualification, Training)
-   * ?? _isUserQualified (Competency, Proficiency) Validated against Calendar Users?
-   * 
-   */
   return EXIT_SUCCESS;
 }
 
 
 // START AND MINIMUM ARE ALWAYS ENFORCED
 // BUSINESSHOURS, END, AND MAXIMUM ARE IGNORED FOR PERSON = EXTENDED HOURS OR USER = ADMIN
-function isValidDuration(event) {
-  EXIT_FAILURE.message = `Reservation must end after it starts`;
+function isValidDuration (event) {
+  EXIT_FAILURE.message = `Reservation end must be after it starts`;
   return { ...EXIT_FAILURE, response: event.start < event.end };
 }
 
@@ -214,7 +187,7 @@ function isUnderUserHours(event) {
   // IGNORE FOR UNATTENDED RESERVATIONS ??
   if (event.extendedProps?.status == EVENT_STATUS.unattended) return EXIT_SUCCESS;
 
-  //  const newEventDuration = event.end.getTime() - event.start.getTime();
+//  const newEventDuration = event.end.getTime() - event.start.getTime();
   const maxDuration = userHours * 60 * 60 * 1000; //hoursToMilliseconds(userHours);
   const eventMilliseconds = event.end.getTime() - event.start.getTime();
 
@@ -259,62 +232,6 @@ function isUnderMaxUsers(event) {
   });
 
   return { ...EXIT_FAILURE, response: Math.max(userTotals) <= maxUsers };
-}
-
-function isActiveResource(event) {
-  const EXIT_FAILURE = { response: false, message: `Resource is not currently active` };
-
-  // ONLY CHECK ON NEW RESOURCE EVENTS ( createEvent() )
-  if (!event.resource) return EXIT_SUCCESS;
-  
-  return { ...EXIT_FAILURE, response: event.resource?.extendedProps?.status != 'Inactive' };
-}
-
-function isUserResource(event) {
-  const EXIT_FAILURE = { response: false, message: `Resource is not allowed` };
-
-  // ONLY CHECK ON NEW RESOURCE EVENTS ( createEvent() )
-  if (!event.resource || !SETTINGS.CALENDAR.options?.restrictResources) return EXIT_SUCCESS;
-
-  /* CHECK EVERY RESOURCE 
-  let result = true;
-  event.resource.forEach(element => {
-    result = result && SETTINGS.USER.resources.includes(element.id)
-  }); */
-  
-  return { ...EXIT_FAILURE, response: SETTINGS.USER.resources.includes(event.resource.id) };
-
-}
-
-function getOverappingUsers(event) {
-  let person = event.extendedProps?.person ? event.extendedProps.person : SETTINGS.USER.id;
-
-  const overlappingEvents = calendar.getEvents().filter((element) => {
-    return (
-      element.end > event.start && element.start < event.end &&
-      element.id !== event.id &&
-      element.extendedProps.person !== person &&
-      element.extendedProps.status !== EVENT_STATUS.unattended
-    );
-  });
-
-  let userList = [person];
-  overlappingEvents.forEach((element) => {
-    //    let userCount = [person];
-
-    //    let overlap = { start: new Date(Math.max(event.start, element.start)), end: new Date(Math.min(event.end, element.end)) };
-    if (!userCount.includes(element.extendedProps.person)) userList.push(element.extendedProps.person);
-    /*
-        for (i = index + 1; i < array.length; i++) {
-          let compare = array[i];
-    
-          if (!userCount.includes(compare.extendedProps.person) && getEventOverlap(overlap, compare)) userCount.push(compare.extendedProps.person);
-        }
-        userTotals[index] = userCount.length;
-    */
-  });
-  if (userList.length > 1) return userList;
-  return '';
 }
 
 function getEventDays(event) {
@@ -412,12 +329,9 @@ function toaster(message) {
 
   if (document.getElementById("warning")) {
     element = document.getElementById("warning");
-//    element.setAttribute("class", "toast-container position-absolute top-50 end-0 translate-middle-y" );
   } else {
     parent = document.createElement("div");
-//    parent.setAttribute("class", "toast-container top-0 end-0 p-3");
-    parent.setAttribute("class", "toast-container position-fixed top-0 end-0 p-3");
-//  parent.setAttribute("class", "toast-container position-absolute top-50 end-0 translate-middle-y" );
+    parent.setAttribute("class", "toast-container top-0 end-0 p-3");
 
     element = document.createElement("div");
     element.setAttribute("id", "warning");
@@ -450,7 +364,7 @@ function hideWarning() {
 
 function getDate(string) {
   let date = new Date(string);
-  if (string && date instanceof Date && !isNaN(date)) return date;
+  if ( string && date instanceof Date && !isNaN(date) ) return date;
   return null;
 }
 function getTimestampString(date) {

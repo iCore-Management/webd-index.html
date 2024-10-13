@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Barcode</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <script type="text/javascript">
+    /**
+     * 
+     * Generate Barcodes in Javascript
+     * https://github.com/lindell/JsBarcode/wiki/Options
+     * 
+     * To initialize call ?data={function:initialize,options:$_options}
+     * 
+     * Notes: 
+     *  Options noted below
+     *  LabOrders v2
+     */
+    const API = document.title;
+
+    const
+      HOST = window.location.hostname,
+      URL_PARAMETERS = new URLSearchParams(globalThis.location.search),
+      SCRIPT = URL_PARAMETERS.get('script'),
+      WEBVIEWER = URL_PARAMETERS.get('webviewer'),
+      DATA = URL_PARAMETERS.get('data'),
+      __STATUS__ = {};
+
+    function init(data = '{}') {
+      if (data == 'null') data = '{}';
+
+      let settings = JSON.parse(data);
+      if (settings?.function != null) {
+        window[settings.function](JSON.stringify(settings.options));
+      } else activate();
+    }
+
+    function activate(data = '{}') {
+      /* RUN FUNCTION WITH OPTIONS */
+      __STATUS__.activate = true;
+      if (data != '{}') init(data);
+
+      /* CALL FM TO REPORT ACTIVE */
+      let active = setInterval(() => {
+        if (window.FileMaker) {
+          clearInterval(active);
+
+          let param = {
+            method: API + '.initialize',
+            config: { webviewer: WEBVIEWER, function: 'initialize' },
+            data: __STATUS__,
+          };
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    }
+
+  </script>
+  <!-- JSBarcode -->
+  <script src="JsBarcode.all.min.js"></script>
+</head>
+
+<body onload='init(decodeURIComponent(DATA))'>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement('img'), {
+        hidden: true,
+        id: API, className: 'container-fluid mt-1'
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    function initialize(options = '{}') {
+      if (options == 'null') options = '{}';
+      __STATUS__.options = JSON.parse(options);
+      show(DATA != ''); //ONLY IF DATA SENT TO ACTIVATE...
+      if (options != '{}') createCode(options);
+    };
+
+    function getCode(options) {
+      createCode(options);
+      returnCode();
+    };
+
+    function createCode(options = '{}') {
+      let settings = JSON.parse(options);
+      JsBarcode('#' + API, settings.text, settings);
+    };
+
+    function returnCode() {
+      let result = setInterval(() => {
+        let base64 = document.getElementById(API).src.split(',')[1];
+        if (base64) {
+          clearInterval(result);
+
+          let param = {
+            method: API + '.base64',
+            config: { webviewer: WEBVIEWER, function: '' },
+            data: { base64: base64 }
+          };
+
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    };
+
+    /*
+    Option	        Default value	            Type
+    format	        "auto" (CODE128)	        String
+    width	          2	                        Number
+    height	        100	                      Number
+    displayValue	  true	                    Boolean
+    text	          undefined	                String
+    fontOptions	    ""	                      String
+    font	          "monospace"	              String
+    textAlign	      "center"	                String
+    textPosition	  "bottom"	                String
+    textMargin	    2	                        Number
+    fontSize	      20	                      Number
+    background	    "#ffffff"	                String (CSS color)
+    lineColor	      "#000000"	                String (CSS color)
+    margin	        10	                      Number
+    marginTop	      undefined	                Number
+    marginBottom	  undefined	                Number
+    marginLeft	    undefined	                Number
+    marginRight	    undefined	                Number
+    flat	          false	                    Boolean
+    valid	          function(valid){}	        Function
+    */
+  </script>
+</body>
+
+</html>

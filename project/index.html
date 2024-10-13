@@ -1,122 +1,151 @@
 <!DOCTYPE html>
 <html lang="en-us">
-<head><meta charset="UTF-8" />
-  <title>Web Applications</title>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>WebDirect</title>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-  <!-- https://support.claris.com/s/article/Linking-directly-to-an-OAuth-sign-in-when-opening-apps-with-FileMaker-WebDirect?language=en_US -->
-  <script src="js/oauth_v1/fmwebd_oauth.js"></script>
+  <script type="text/javascript">
+    /**
+     * 
+     * Manage Server and Application Logins
+     * https://support.claris.com/s/article/Linking-directly-to-an-OAuth-sign-in-when-opening-apps-with-FileMaker-WebDirect?language=en_US
+     * 
+     * Notes: 
+     *  ReseearchOpsTest, ResearchOps
+     */
+    const API = document.title;
 
-    <!-- INITIALIZE FILEMAKER INTEGRATION FROM URL PARAMETERS-->
-    <script>
-//      const API = "qrcode";
+    const
+      HOST = window.location.hostname,
+      URL_PARAMETERS = new URLSearchParams(globalThis.location.search),
+      SCRIPT = URL_PARAMETERS.get('script'),
+      WEBVIEWER = URL_PARAMETERS.get('webviewer'),
+      DATA = '{"function":"initialize"}',
+      __STATUS__ = {};
 
-      const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
-      const DB = URL_PARAMETERS.get("db");
-      const APP = URL_PARAMETERS.get("app");
-      URL_PARAMETERS.delete("db"); URL_PARAMETERS.delete("app");
+    __STATUS__.notice = '';
 
-      const HOST = window.location.hostname,
-        WEBD = "/fmi/webd/", // Default location for FileMaker WebDirect
-        HOME = window.location.protocol + "//" + HOST + WEBD,
-        ALERT = "The Back button is disabled for this application.";
-
-      let notice;
-      //notice = HOST + " will be down for scheduled maintenance Saturday, 1/21/2023 from 10:00am to 4:00pm.";
-      //notice="These applications are for testing only";
-
-    </script>
-
-</head>
-<body>
-  <iframe name="webDirect" id="webdirect-frame" frameborder="0" allowfullscreen src=""
-    style="position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"></iframe>
-
-
-  <script>
-    const FRAME = document.getElementsByName("webDirect")[0];
-    const TRACKER = "3148297417811849999593776656047571234446757942870899620214";
-
-    let application = APP ? APP.replace("-", " ") : ( DB ? DB.replace("-", " ") : "" );
-    document.title = HOST + ( application ? ": " + application : "" );
-    const DBNAME = application ? encodeURIComponent(application) + ( URL_PARAMETERS.size ? "?" + URL_PARAMETERS.toString() : "" ) : "";
-    const uri = HOME + DBNAME;
-
-    function initOAuth() {
-      getProviderInfo(function(providerInfo) {
-        let data = providerInfo ? JSON.parse(providerInfo).data : "";
-//        console.log(JSON.stringify(data));
-        if (data != null && data != "" ) {
-          showOAuthLogin( data.Provider[0].Name );
-        } else {
-          FRAME.src = uri
-        }
-      });
+    function init(data = '{}') {
+      let settings = JSON.parse(data);
+      if (settings.function != null && settings.function != 'activate') window[settings.function](JSON.stringify(settings.options));
     }
 
+    function activate(data = '{}') {
+      /* RUN FUNCTION WITH OPTIONS */
+      init(data);
+
+      /* CALL FM TO REPORT ACTIVE */
+      let active = setInterval(() => {
+        if (window.FileMaker) {
+          clearInterval(active);
+
+          let param = {
+            method: API + '.initialize',
+            config: { webviewer: WEBVIEWER, function: 'initialize' },
+            data: { activate: true },
+          };
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    }
+
+  </script>
+</head>
+
+<body onload='init(decodeURIComponent(DATA))'>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script src="js/oauth/v2/oauth.js"></script>
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement('iframe'), {
+        hidden: true,
+        id: API, name: API, style: "position:fixed; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;"
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    function initialize(options = '{}') {
+      __STATUS__.options = JSON.parse(options);
+      show(true);
+      getProviderInfo(function (providerInfo) {
+        let data = providerInfo ? JSON.parse(providerInfo).data : '';
+        if (data != null && data != '' && DBNAME != '') {
+          showOAuthLogin(data.Provider[0].Name);
+
+        } else FRAME.src = LOGIN;
+      });
+      if (__STATUS__.notice) alert(__STATUS__.notice);
+      //      window.removeEventListener("load", initialize);
+    };
+
+    const
+      WEBD = '/fmi/webd/', // Default location for FileMaker WebDirect
+      HOME = window.location.protocol + '//' + HOST,
+      ALERT = 'The Back button is disabled for this application.';
+
+    const
+      APP = URL_PARAMETERS.get('app'),
+      DBNAME = APP ? APP.replace('-', ' ').replace('+', ' ') : '',
+      HIDELOGIN = 'hidelocalaccountentry=1',
+      PARAM = (URL_PARAMETERS.size ? URL_PARAMETERS.toString() + '&' : '') + HIDELOGIN;
+
+    const FRAME = document.getElementById(API);
+
+    document.title = HOST + (DBNAME ? ': ' + DBNAME : '');
+    /* Encode Script and Param URL Parameters with login */
+    const LOGIN = HOME + WEBD + encodeURIComponent(DBNAME) + '?' + PARAM;
+
     function showOAuthLogin(providerName) {
-      let child = window.open("/js/oauth/popup.html", providerName, "width=800, height=600");
-      if (child==null){
-        alert("Please disable pop-up blockers for this site, then continue.");
-        child = window.open("/js/oauth/popup.html", providerName, "width=800, height=600");
-        if (child==null){
-          //POPUPS still blocked, go to login screen
-          FRAME.src = uri;
-//          return;
-        } 
+      let child = window.open('/js/oauth/popup.html', providerName, 'width=800, height=600');
+      if (child == null) {
+        alert('Please disable pop-up blockers for this site, then continue.');
+        child = window.open('/js/oauth/popup.html', providerName, 'width=800, height=600');
+        /* POPUPS still blocked, go to login screen */
+        if (child == null) FRAME.src = LOGIN;
       }
 
-//      const trackingId = "3148297417811849999593776656047571234446757942870899620214";
-//      const master = window.location.hostname; //HOST
-
-      getOAuthURL(TRACKER, HOST, providerName, function(oauthUrl, requestId) {
+      const TRACKER = guid();
+      getOAuthURL(TRACKER, HOST, providerName, function (oauthUrl, requestId) {
         child.location.replace(oauthUrl);
-
-        // Listen to localstorage event to receive response from OAuth provider
-        window.addEventListener("storage", function processOAuthResponse(event) {
-          // Response from OAuth provider
-          // Sample format: "trackingID=123432&identifier=83FF55EF5B8B1442D702C19DF63115BC&error=0"
+        window.addEventListener('storage', function processOAuthResponse(event) {
           let response = event.newValue;
-          
-          let retTrackingId = getOAuthResponseParameter(response, "trackingID");
-          // Compare tracking ID against returned one to make sure
-          // this is the correct response to process
-          if (TRACKER == retTrackingId) {
-            window.removeEventListener("storage", processOAuthResponse);
-            localStorage.removeItem("oauth-response");
-            doOAuthLogin( DBNAME, requestId, getOAuthResponseParameter(response, "identifier"), HOME, getOAuthResponseParameter(response, "error"), "webDirect" );
+          let retTrackingId = getOAuthResponseParameter(response, 'trackingID');
+
+          if (retTrackingId == TRACKER) {
+            window.removeEventListener('storage', processOAuthResponse);
+            localStorage.removeItem('oauth-response');
+            if (DBNAME != '') {
+              doOAuthLogin(DBNAME, requestId, getOAuthResponseParameter(response, 'identifier'), LOGIN, getOAuthResponseParameter(response, 'error'), API, PARAM);
+            } else FRAME.src = LOGIN;
+              // doLogin('0', '1', '0', '', '', '0', requestId, getOAuthResponseParameter(response, 'identifier'), getOAuthResponseParameter(response, 'error'))
+              // doListLogin('0', '1', '0', '', '', '0', requestId, getOAuthResponseParameter(response, 'identifier'), getOAuthResponseParameter(response, 'error'));
           }
         });
       });
     }
 
-    function getOAuthResponseParameter(input, parameter) {
-      if (input != null) return new URLSearchParams(input).get(parameter);
-      return "";
-    }
-
-    // Prevent Back button click
-    FRAME.addEventListener("load", function() {
+    /* Prevent Back button in FileMaker Session */
+    FRAME.addEventListener('load', function () {
       history.pushState(null, null, null);
     })
-    //history.pushState(null, null, document.title);
-    window.addEventListener("popstate", function () {
-      //Display the alert when back button is pressed
-      alert(alertText);
+    window.addEventListener('popstate', function () {
+      /* Display the alert when back button is pressed */
+      alert(ALERT);
       history.pushState(null, null, null);
     });
 
-    window.addEventListener("load", function initialize() {
-      if (APP != null && APP != "") {
-        initOAuth();
-      }else{
-        FRAME.src = uri;
-      }
-      if (notice) alert(notice);
-      window.removeEventListener("load", initialize);
-    })
   </script>
 </body>
+
 </html>

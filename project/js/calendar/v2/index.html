@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Calendar</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <script type="text/javascript">
+    /**
+     * 
+     * Manage a Calendar in Javascript
+     * https://fullcalendar.io/docs 
+     * 
+     * Notes: 
+     *  LabAccess, LabTime, LabSupport
+     */
+    const API = document.title;
+
+    const URL_PARAMETERS = new URLSearchParams(globalThis.location.search);
+    const SCRIPT = URL_PARAMETERS.get('script');
+    const INITIALIZE = URL_PARAMETERS.get('initialize');
+    const WEBVIEWER = URL_PARAMETERS.get('webviewer');
+    const __STATUS__ = {};
+
+    //    if ( INITIALIZE == true ) {
+    init();
+    //    }
+
+    function init(data) {
+      let init = setInterval(() => {
+        if (window.FileMaker) {
+          clearInterval(init);
+
+          let param = {
+            method: API + '.initialize',
+            config: { webviewer: WEBVIEWER, function: 'initialize' },
+            data: data,
+          };
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    }
+
+    function activate(options = '{}') {
+      let settings = JSON.parse(options);
+
+      if (settings.function != null) {
+        window[settings.function](JSON.stringify(settings.options));
+      }
+      init({ active: true, });
+
+    }
+
+  </script>
+  <!-- Full Calendar -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> -->
+  <!-- <script src="fullcalendar.min.js"></script> -->
+  <!-- BY PLUGIN -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/index.global.min.js"></script> -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/daygrid@6.1.11/index.global.min.js"></script> -->
+  <!-- PREMIUM -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar-scheduler@6.1.15/index.global.min.js"></script>
+  <!-- <script src="fullcalendar.premium.min.js"></script> -->
+
+  <!-- Recurrence Rule Library -->
+  <script src="https://cdn.jsdelivr.net/npm/rrule@2.6.4/dist/es5/rrule.min.js"></script>
+  <!-- the rrule-to-fullcalendar connector. must go AFTER the rrule lib -->
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/rrule@6.1.11/index.global.min.js"></script>
+
+  <!-- BOOTSTRAP 5 Theme -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Popper
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js"</script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"</script> -->
+  <!-- BOOTSTRAP 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Full Calendar Custom CSS -->
+  <style>
+    .fc-timegrid-event {
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script src="./Calendar.js"></script>
+  <script src="./Events.js"></script>
+  <script src="./fmCallback.js"></script>
+  <script src="./isEventValid.js"></script>
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement('div'), {
+        id: API, className: 'container-fluid mt-1', hidden: true
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    if (URL_PARAMETERS.get('data')) {
+      createCalendar(URL_PARAMETERS.get('data'));
+      show(true);
+    };
+    function initialize(options) {
+      createCalendar(options);
+    };
+
+
+    const SETTINGS = {};
+    var calendar;
+
+    function createCalendar(settings = '{}') {
+      const { Options, Settings } = JSON.parse(settings);
+      //OPTIONS FOR CALENDAR
+
+      //SET CALENDAR USER ACCESS (BY SOURCE???)
+      let extendedHours = Settings.calendar?.extendedHours ? Settings.calendar.extendedHours : [];
+      let access = extendedHours.includes(Settings.user?.id) ? 'extendedHours' : 'user';
+      let admins = Settings.calendar?.admins ? Settings.calendar.admins : [];
+      Settings.calendar.extendedHours = extendedHours;
+      Settings.user = { ...Settings.user, access: admins.includes(Settings.user.id) ? 'admin' : access };
+      // ADMIN/ EXTENDEDHOURS IGNORES open/close, userHours, maxTime, businessHours
+
+      Settings.query.fields = getEventFields(Settings.query.table, Settings.query.fields);
+
+      if ( !Array.isArray(Settings.sources) ) Settings.sources = [];
+      Options.resources = [];
+      if (Settings.calendar.resources?.length) {
+        Options.resources = Settings.calendar.resources?.map((row) => ({
+          ...row,
+          parentId: Settings.calendar.id,
+        })
+        );
+      }
+      Options.resources.push({ id: Settings.calendar.id, title: Settings.calendar.title });
+
+      /** RESERVATION WINDOW
+       * 
+       * Sends Options.eventConstraint : { start, end }
+       *  to designate enforced calendar reservation boundaries //(start only, for admins)
+       *  applies to all sources
+       *  use as lock : { start, end }
+       * 
+       * Sends Options.businessHours : []
+       *  to designate user event and select constraints
+       *  applies to all sources
+       *  applies to users
+       * 
+       * Sends Settings.calendar.window : { start, end }
+       *  to designate user reservation window
+       *  applies to all sources
+       *  applies to users
+       *  for users set as { start : Max ( eventConstraint.start; window.start ), end : Min ( eventConstraint.end; window.end )}
+       *  for admins = eventConstraint {start}
+       *  verified for new reservations in Options.eventConstraint and Options.selectConstraint (unless case business hours)
+       *    eventAllow(), selectAllow(), must be verified incase of businessHours
+       * 
+       * Sends Settings.sources[0].constraint
+       *  to designate source : { start, end }
+       *  for users, sets a start and end date when reservations are allowed (combine with reservation window)
+       *  for users, set window as { start : Max ( [0].constraint.start; window.start ), end : Min ( [0].constraint.end; window.end )}
+       *  ignore for admins
+       *  //verify when moving reservations in eventAllow(), automatically since source applied
+       *  verify when new user selection in selectAllow(), manually by checking calendar.window
+       *    OR update window{} to include source[0].constraint
+       * 
+       * 
+       * 
+      **/
+
+      // CALENDAR VALID REGION
+      Options.initialDate = getDate(Options.initialDate);
+      Options.validRange = { start: getDate(Options.validRange?.start), end: getDate(Options.validRange?.end) };
+
+      // CALENDAR LOCK FOR ALL USERS BASED ON START - END
+      const START = getDate(Options.eventConstraint?.start);
+      const END = getDate(Options.eventConstraint?.end);
+      Options.eventConstraint = { start: START, end: END };
+      // users: (today - 14 , end )
+      // admins: (today - 14 )
+
+      if (Settings.user.access != 'user') {
+        // DON'T ENFORCE BUSINESS HOURS / CONSTRAINT END FOR ADMIN OR EXTENDEDHOURS
+        Options.businessHours = false;
+        Options.eventConstraint.end = null;
+        Settings.calendar.window = Options.eventConstraint;
+
+        // REMOVE ALL SOURCE[0]CONSTRAINTS FOR ADMINS
+        Settings.sources[0].constraint = null;
+      } else {
+        // USER RESERVATION WINDOW, APPLY MINIMUM LOCK AND WINDOW AND SOURCE[0]CONSTRAINTS
+        Settings.calendar.window = { start: Math.max.apply(null, [START, getDate(Settings.calendar.window?.start), getDate(Settings.sources[0].constraint?.start)]), end: Math.min.apply(null, [END, getDate(Settings.calendar.window?.end), getDate(Settings.sources[0].constraint?.end)].filter(Boolean)) };
+        // ENFORCE BUSINESS HOURS IF PROVIDED, OTHERWISE WINDOW
+        Options.eventConstraint = Options.businessHours ? 'businessHours' : Settings.calendar.window;
+      }
+      Options.selectConstraint = Options.eventConstraint;
+
+      // SET GLOBALS
+      SETTINGS.USER = Settings.user;
+      SETTINGS.SOURCES = Settings.sources;
+      SETTINGS.CALENDAR = Settings.calendar;
+      SETTINGS.QUERY = Settings.query;
+
+
+      /** FULLCALENDAR.IO
+       * Set Up Calendar with functions => Calendar.js
+       * Calendar.js calls Events for customizations
+       * Set Up callbacks in Calendar, passed to Events for customizations */
+      calendar = new FullCalendar.Calendar(document.getElementById(API),
+        Object.assign(Options, {
+
+          /* Premium Plugins: https://fullcalendar.io/docs/premium */
+          schedulerLicenseKey: 'CC-Attribution-NonCommercial-NoDerivatives',
+
+          /** TOOLBAR *****************************************
+           * + headerToolbar
+           * footerToolbar
+           * titleFormat
+           * titleRangeSeparator
+           * + buttonText
+           * buttonIcons; https://icons.getbootstrap.com/
+           * customButtons
+           */
+
+          /** THEME *****************************************/
+          themeSystem: 'bootstrap5',
+
+          /** SIZING *****************************************
+           * + height
+           * + contentHeight
+           * aspectRatio
+           * expandRows
+           * updateSize()
+           * handleWindowResize
+           * windowResizeDelay
+           * + stickyHeaderDates
+           * stickyFooterScrollbar
+           * CALLBACKS
+           * windowResize =>
+           */
+
+          /* VIEWS:
+              timeGridWeek | timeGridDay |  listDay | listWeek | listMonth | listYear | dayGridMonth | dayGridWeek | dayGridDay | dayGridYear | multiMonthYear
+                timelineDay | timelineWeek | timelineMonth | timelineYear
+          */
+
+          /** MONTH VIEW *****************************************
+           * MONTH-VIEW-SPECIFIC OPTIONS
+           * fixedWeekCount
+           * showNonCurrentDates
+           */
+
+          /** TIMEGRID VIEW *****************************************
+           * TIMEGRID-SPECIFIC OPTIONS
+           * eventMinHeight
+           * eventShortHeight
+           * slotEventOverlap
+           * allDaySlot
+           * All-Day Render Hooks
+           */
+
+          /** LIST VIEW *****************************************
+           * LIST-VIEW-SPECIFIC OPTIONS
+           * listDayFormat
+           * listDaySideFormat
+           * No-Events Render Hooks
+           */
+
+          /** DAYGRID VIEW *****************************************
+           * DAYGRID-SPECIFIC OPTIONS
+           * monthStartFormat
+           */
+
+          /** MULTI-MONTH STACK *****************************************/
+
+          /** MULTI-MONTH GRID *****************************************
+           * MULTIMONTH-SPECIFIC OPTIONS
+           * multiMonthMaxColumns
+           * multiMonthMinWidth
+           * multiMonthTitleFormat
+           */
+
+          /** TIMELINE VIEW (PREMIUM)*****************************************
+           * TIMELINE-SPECIFIC OPTIONS
+           * resourceGroupField
+           * resourceAreaWidth
+           * resourceAreaColumns
+           * resourcesInitiallyExpanded
+           * slotMinWidth
+           * eventMinWidth
+           * Timeline View with no Resources
+           * Resource Group Render Hooks
+           * Resource-Area Header Render Hooks
+           */
+
+          /** VERTICAL RESOURCE VIEW (PREMIUM)*****************************************
+           * datesAboveResources
+           * Resource DayGrid View
+           */
+
+          /** CUSTOM VIEWS *****************************************
+           * TECHNIQUES
+           * Custom Views via Settings
+           */
+
+          /** VIEW API *****************************************
+           * + initialView
+           * View Object
+           * Calendar::view
+           * Calendar::changeView
+           * View Render Hooks
+           */
+
+          /** DATE & TIME DISPLAY *****************************************
+           * WHOLE-DAY SETTINGS
+           * + weekends
+           * + hiddenDays
+           * + dayHeaders
+           * dayHeaderFormat
+           * dayMinWidth
+           * Day-Header Render Hooks
+           * Day-Cell Render Hooks
+           *
+           * TIME-AXIS SETTINGS
+           * + slotDuration
+           * slotLabelInterval
+           * slotLabelFormat
+           * + slotMinTime
+           * + slotMaxTime
+           * + scrollTime
+           * + scrollTimeReset
+           * Slot Render Hooks
+           * 
+           * METHODS
+           * scrollToTime
+           * 
+           * CALLBACKS
+           * datesSet
+           */
+
+          /** DATE NAVIGATION *****************************************
+           * + initialDate
+           * dateIncrement
+           * dateAlignment
+           * + validRange
+           * 
+           * METHODS
+           * Calendar::prev()
+           * Calendar::next()
+           * Calendar::prevYear()
+           * Calendar::nextYear()
+           * Calendar::today()
+           * Calendar::gotoDate()
+           * Calendar::incrementDate()
+           * Calendar::getDate()
+           */
+
+          /** DATE NAV LINKS *****************************************
+           * + navLinks
+           * + navLinkDayClick, view or function
+           * + navLinkWeekClick, view or function
+           */
+
+          /** WEEK NUMBERS *****************************************
+           * + weekNumbers
+           * weekNumberCalculation
+           * weekText
+           * weekTextLong
+           * weekNumberFormat
+           * Week-Number Render Hooks
+           */
+
+          /** DATE CLICKING & SELECTING *****************************************
+           * + selectable, bool
+           * + selectMirror, bool
+           * + unselectAuto, bool
+           * unselectCancel, string */
+          selectOverlap: (event) => selectOverlap(event),
+          /* selectConstraint, group/businessHours */
+          selectAllow: (selectionInfo) => selectAllow(selectionInfo),
+          /* + selectMinDistance, int
+           * CALLBACKS */
+          dateClick: (dateClickInfo) => dateClick(dateClickInfo), //NEW EVENT ON DAY VIEW
+          select: (selectionInfo) => select(selectionInfo), //NEW EVENT
+          /* unselect 
+          */
+
+          /** NOW INDICATOR *****************************************
+           * + nowIndicator, bool
+           * now
+           * Now-Indicator Render Hooks 
+           */
+
+          /** BUSINESS HOURS *****************************************
+           * + businessHours
+           * businessHours-per-resource 
+           */
+
+          /** EVENT MODEL *****************************************
+           * https://fullcalendar.io/docs/event-model */
+          eventDataTransform: (eventData) => eventDataTransform(eventData),
+          /* defaultAllDay
+           * defaultAllDayEventDuration
+           * defaultTimedEventDuration
+           * forceEventDuration
+           * 
+           * METHODS
+           * Calendar::getEvents()
+           * Calendar::getEventById()
+           * Calendar::addEvent()
+           * Event::setProp()
+           * Event::setExtendedProp()
+           * Event::setStart()
+           * Event::setEnd()
+           * Event::setDates()
+           * Event::setAllDay()
+           * Event::moveStart()
+           * Event::moveEnd()
+           * Event::moveDates()
+           * Event::formatRange()
+           * Event::remove()
+           * Event::getResources()
+           * Event::setResources()
+           * Event::toPlainObject()
+           * 
+           * CALLBACKS */
+          eventAdd: (eventInfo) => eventAdd(eventInfo), //https://fullcalendar.io/docs/eventAdd
+          eventChange: (changeInfo) => eventChange(changeInfo),
+          eventRemove: (removeInfo) => eventRemove(removeInfo),
+          /* eventsSet 
+           */
+
+          /** EVENT SOURCES *****************************************
+           * https://fullcalendar.io/docs/event-source
+           * events => */
+          eventSources:
+            // ERROR CHECK: SETTINGS.SOURCES is an array
+            SETTINGS.SOURCES.map((object, index) => ({
+              ...object,
+              events: (fetchInfo, successCallback, failureCallback) => events({ ...fetchInfo, index: index }, successCallback, failureCallback),
+              /** EVENT SOURCE OBJECT
+               * + id
+               * url
+               * format
+               * color
+               * backgroundColor
+               * borderColor
+               * textColor
+               * className
+               * editable
+               * startEditable
+               * durationEditable
+               * resourceEditable
+               * display
+               * overlap
+               * constraint
+               * allow =>
+               * defaultAllDay
+               * success: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+               * failure =>
+               */
+            })),
+          eventSourceSuccess: (rawEvents, response) => eventSourceSuccess(rawEvents, response),
+          /* eventSourceFailure (eventSources.failure)
+           * initialEvents
+           * lazyFetching */
+          loading: (isLoading) => loading(isLoading),
+          /* METHODS
+           * Calendar::getEventSources
+           * Calendar::getEventSourceById
+           * Calendar::addEventSource
+           * Calendar::refetchEvents
+           * EventSource::refetch
+           * EventSource::remove
+          */
+
+          /** EVENT DISPLAY *****************************************
+           * https://fullcalendar.io/docs/event-display
+           * eventColor (Event.color)
+           * eventBackgroundColor (Event.backgroundColor)
+           * eventBorderColor (Event.borderColor)
+           * eventTextColor (Event.textColor)
+           * eventDisplay (Event.display)
+           * eventTimeFormat
+           * displayEventTime
+           * displayEventEnd
+           * nextDayThreshold
+           * eventOrder
+           * eventOrderStrict
+           * progressiveEventRendering
+           * Event Render Hooks
+           *  eventClassNames */
+          eventContent: (arg) => eventContent(arg),
+          eventDidMount: (arg) => eventDidMount(arg),
+          /* eventWillUnmount 
+           */
+
+          /** EVENT CLICKING AND HOVERING *****************************************
+           * https://fullcalendar.io/docs/event-clicking-hovering */
+          eventClick: (eventClickInfo) => {
+            eventClickInfo.jsEvent.preventDefault(); // don't let the browser navigate
+            if (eventClickInfo.event.url) {
+              window.open(eventClickInfo.event.url);
+            } else {
+              eventClick(eventClickInfo);
+            }
+          },
+          /* eventMouseEnter =>
+           * eventMouseLeave => */
+
+          /** EVENT DRAGGING AND RESIZING *****************************************
+           * https://fullcalendar.io/docs/event-dragging-resizing
+           * FLAGS
+           * + editable (Event.editable)
+           * + eventStartEditable (Event.startEditable)
+           * + eventResizableFromStart
+           * + eventDurationEditable (Event.durationEditable)
+           * eventResourceEditable (Event.resourceEditable)
+           * droppable
+           * EFFECTS
+           * eventDragMinDistance
+           * dragRevertDuration
+           * + dragScroll
+           * + snapDuration
+           * allDayMaintainDuration
+           * fixedMirrorParent
+           * CONTROL */
+          eventOverlap: (stillEvent, movingEvent) => eventOverlap(stillEvent, movingEvent), //RETURN BOOLEAN
+          /* eventConstraint, group/businessHours */
+          eventAllow: (dropInfo, draggedEvent) => eventAllow(dropInfo, draggedEvent), //RETURN BOOLEAN
+          /* dropAccept
+           * CALLBACKS
+           * eventDragStart => */
+          eventDragStop: (changeInfo) => hideWarning(), //https://fullcalendar.io/docs/eventDragStop
+          /* eventDrop => (event change in time)
+           * drop
+           * eventReceive
+           * eventLeave
+           * eventResizeStart => */
+          eventResizeStop: (changeInfo) => hideWarning(), //https://fullcalendar.io/docs/eventResizeStop
+          /* eventResize => (event change in duration)
+           */
+
+          /** EVENT POPOVER *****************************************
+           * dayMaxEventRows
+           * dayMaxEvents
+           * eventMaxStack
+           * moreLinkClick
+           * dayPopoverFormat
+           * More-Link Render Hooks
+           */
+
+          /** RESOURCE DATA (PREMIUM)*****************************************
+           * resources (as an array)
+           * resources (as a JSON feed)
+           * resources (as a function)
+           * Resource Parsing
+           * Resource Object
+           * Associating Events with Resources
+           * refetchResourcesOnNavigate
+           * initialResources
+           * 
+           * METHODS
+           * refetchResources()
+           * getTopLevelResources()
+           * getResources()
+           * getResourceById()
+           * addResource()
+           * Resource::getParent()
+           * Resource::getChildren()
+           * Resource::getEvents()
+           * Resource::setProp()
+           * Resource::setExtendedProp()
+           * Resource::remove()
+           * Resource::toPlainObject()
+           * 
+           * CALLBACKS
+           * resourceAdd =>
+           * resourceChange =>
+           * resourceRemove =>
+           * resourcesSet =>
+           */
+
+          /** RESOURCE DISPLAY (PREMIUM)*****************************************
+           * + resourceOrder
+           * filterResourcesWithEvents
+           * Resource Render Hooks 
+           */
+
+        })
+      );
+      show(true);
+      calendar.render();
+    };
+
+    function changeView(view, date) {
+      if (view == null) { view = window.calendar.view.type };
+      calendar.changeView(view, getDate(date));
+      // https://fullcalendar.io/docs/Calendar-changeView
+    };
+    function gotoDate(date) {
+      calendar.gotoDate(getDate(date));
+    };
+    function refetchEvents(status) {
+      if (status) {
+        let result = JSON.parse(status);
+        if (result.response == false) {
+          toaster(result.message);
+          return false;
+        }
+      }
+      
+      calendar.refetchEvents();
+      calendar.unselect();
+    };
+    function isEventValid(event) {
+
+      let newEvent = eventDataTransform(JSON.parse(event));
+      let response = isValid(newEvent);
+
+      let param = {
+        method: API + '.isValid',
+        config: { webviewer: WEBVIEWER, function: '' },
+        data: response,
+      };
+      FileMaker.PerformScriptWithOption(
+        SCRIPT,
+        JSON.stringify(param),
+        5
+      );
+    };
+
+  </script>
+
+</body>
+
+</html>

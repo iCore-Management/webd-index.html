@@ -1,0 +1,44 @@
+<html lang="en">
+  <head>
+    <title>Barcode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- LOADED FROM PWV11FMRESM01 -->
+
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <script src="JsBarcode.Code39.js"></script>
+    <SCRIPT>
+
+      const urlParams = new URLSearchParams(globalThis.location.search);
+      var script = urlParams.get("script");
+      var data = urlParams.get('data');
+
+    </SCRIPT>
+</HEAD><BODY>
+    <img id="barcode" hidden></img>
+</BODY>
+<SCRIPT>
+  function setBarcode () {
+    
+    JsBarcode("#barcode", data);
+    
+      var param = {
+        action : "Set Barcode",
+        img : document.getElementById("barcode").src
+      };
+  
+      let checkFMInterval = setInterval(() => {
+        if (window.FileMaker) {
+          clearInterval(checkFMInterval);
+  
+          FileMaker.PerformScriptWithOption(
+          script,
+          JSON.stringify(param),
+          5
+          );
+          }
+      }, 100);
+    }
+  </SCRIPT>
+  </html>

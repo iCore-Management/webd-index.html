@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Download</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <script type="text/javascript">
+    /**
+     * 
+     * Download Container files from FileMaker
+     * This web file uses the FileMaker Data API to authenticate to a database and download a container.
+     * An account name and password with "fmrest" extended privilege and acces to the database, layout, and fields is required.
+     * Data API must be turned on for the server.
+     * 
+     * @parameters
+     * 
+     * Parameters can be sent as url query parameters, a hex encoded JSON Object, or hard-coded to this file.
+     * The name of the container field to download, and the name of a field containing the filename must be included.
+     * Instead of the FileMaker record ID, a query field name and a query value can be included. The Data API is used to search the query field for the query value.
+     * 
+     * Notes: 
+     *  https://researchOpsTEST.nrel.gov/js/?recordID=5432
+     * 
+     * https://researchopstest.nrel.gov/js/download/v1/?data=%7B%0D%09%22id%22%20:%2090790%0D%7D ( DO NOT URL ENCODE PARAMETERS??)
+     * https://researchopstest.nrel.gov/js/download/v1/?data={"id":90790} (NO)
+     * https://researchopstest.nrel.gov/js/download/v1/?data=7B0D0922696422203A2039303739300D7D
+     * https://researchopstest.nrel.gov/js/download/v1/?id=90790
+     * 
+     */
+    const API = document.title;
+
+    const
+      HOST = window.location.hostname,
+      URL_PARAMETERS = new URLSearchParams(globalThis.location.search),
+      SCRIPT = URL_PARAMETERS.get('script'),
+      WEBVIEWER = URL_PARAMETERS.get('webviewer'),
+      DATA = URL_PARAMETERS.get('data'),
+      __STATUS__ = {};
+
+    function init(data = '{}') {
+      /* Called from Load("DATA") or called from Activate("data" {function:"",options:""}) */
+      // DATA IS HEX ENCODED STRING
+
+      if (data == 'null') initialize(DATA); //YESS
+      else {
+        var options = "";
+        for (var i = 0; i < data.length; i += 2) options += String.fromCharCode(parseInt(data.substr(i, 2), 16));
+        let settings = JSON.parse(options);
+        if (settings?.function != null) {
+          window[settings.function](JSON.stringify(settings.options));
+        } else initialize(options); //NOOO
+      }
+    }
+
+    function activate(data = '{}') {
+      /* RUN FUNCTION WITH OPTIONS */
+      let settings = JSON.parse(data);
+      if (settings?.function != null) {
+        init(data);
+      }
+
+      __STATUS__.activate = true;
+      /* CALL FM TO REPORT ACTIVE */
+      let active = setInterval(() => {
+        if (window.FileMaker) {
+          clearInterval(active);
+
+          let param = {
+            method: API + '.initialize',
+            config: { webviewer: WEBVIEWER, function: 'initialize' },
+            data: __STATUS__,
+          };
+          FileMaker.PerformScriptWithOption(
+            SCRIPT,
+            JSON.stringify(param),
+            5
+          );
+        }
+      }, 100);
+    }
+
+  </script>
+  <!-- Data API Authorization -->
+  <!-- <script src="oauth/v1/auth.js"></script> -->
+</head>
+
+<body onload='init(decodeURIComponent(DATA))'>
+
+  <!-- API FUNCTIONS FOR FILEMAKER -->
+  <script type="text/javascript">
+    document.body.prepend(
+      Object.assign(document.createElement('button'), {
+        hidden: true,
+        id: API, style: "width:100%;background-color: DodgerBlue;border: none;color: white;padding: 12px 30px;cursor: pointer;font-size: 20px;"
+      })
+    );
+    function show(show) {
+      document.getElementById(API).hidden = !show;
+    };
+
+    function initialize(options = '{}') {
+      __STATUS__.options = JSON.parse(options);
+      show(DATA != ''); //ONLY IF DATA SENT TO ACTIVATE...
+      if (options != '{}') startDownload(options);
+    };
+
+    const ACCOUNT = "fm_migration";
+    const PWD = "";
+    const AUTH = "Basic " + btoa(ACCOUNT + ":" + PWD);
+    //const AUTH = authorize();
+
+    const VERSION = "vLatest";
+    const PATH = window.location.protocol + "//" + HOST + "/fmi/data/" + VERSION;
+//    const dAPI = {
+//      version:'vLatest',
+//      path: window.location.protocol + "//" + HOST + "/fmi/data/" + VERSION,
+//    }
+
+    const OPTIONS = URL_PARAMETERS.get("options") ? URL_PARAMETERS.get("options") : {
+      db: "Resops_Data",
+      lay: "Document",
+      container: "document",
+      filename: "fileName",
+      key: '@UUID',
+    };
+    var settings = {
+      id: URL_PARAMETERS.get("id"),
+//      id: '51476',
+      uuid: URL_PARAMETERS.get("uuid"),
+    };
+
+  //  id: "51476", //img
+  //      id: "114359", //word
+  //      id: "90790", //pdf
+
+
+ 
+
+    function startDownload() {
+      document.getElementById(API).innerHTML = "Downloading...";
+      startSession(PATH, AUTH);
+    }
+
+    function startSession(url, authorization) {
+
+      let method = "POST";
+      let content = "application/json";
+
+      let api = "/databases/" + OPTIONS.db + "/sessions";
+      let endpoint = "";
+      let body = "";
+
+      fetch(url + api + endpoint, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": authorization,
+        },
+        body: "",
+      })
+        .then(response => response.json())
+        .then(json => {
+
+          __STATUS__.TOKEN = json.response.token;
+          console.log("startSession: " + __STATUS__.TOKEN);
+
+          if (settings.id.length && settings.id !== null) {
+            getRecord(settings.id);
+          } else {
+            findRecord(OPTIONS.key, settings.uuid);
+          }
+        })
+        .catch(error => {
+          console.log("1Error: ", error);
+        });
+    };
+
+    function downloadContainer(record) {
+      let uri = record[OPTIONS.container];
+      let fileName = record[OPTIONS.filename];
+
+      downloadFileAs(uri, fileName);
+      endSession(PATH, __STATUS__.TOKEN);
+    }
+
+    function findRecord(key, value) {
+
+      let method = "POST";
+      let content = "application/json";
+
+      let api = "/databases/" + OPTIONS.db + "/layouts/" + OPTIONS.lay + "/_find";
+      let endpoint = "";
+
+      let query = { "query": [{ [key]: value }], "limit": 1, "offset": 1 };
+      //      console.log(query);
+
+      fetch(PATH + api + endpoint, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": "Bearer " + __STATUS__.TOKEN,
+        },
+        body: JSON.stringify(query)
+      })
+        .then(response => { json = response.json(); console.log(response); return json })
+        .then(data => {
+          console.log(data);
+          let record = data.response.data[0].fieldData;
+          downloadContainer(record);
+
+        })
+        .catch(error => {
+          endSession(PATH, __STATUS__.TOKEN);
+          console.log("2Error: ", error);
+        });
+    };
+
+    function getRecord(id) {
+
+      let method = "GET";
+      let content = "application/json";
+
+      let api = "/databases/" + OPTIONS.db + "/layouts/" + OPTIONS.lay + "/records/";
+      let endpoint = id;
+
+      fetch(PATH + api + endpoint, {
+        method: method,
+        headers: {
+          "Content-Type": content,
+          "Authorization": "Bearer " + __STATUS__.TOKEN,
+        }
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);
+          let record = data.response.data[0].fieldData;
+          downloadContainer(record);
+
+        })
+        .catch(error => {
+          //NO RECORD FOUND
+          endSession(PATH, __STATUS__.TOKEN);
+          console.log("3Error: ", error);
+        });
+    };
+
+    function downloadFileAs(url, filename) {
+      //      console.log("Downloading: " + filename);
+      if (filename == "") {
+        alert("File Removed")
+      } else {
+        fetch(url)
+          // accept the file to binary data
+          .then((res) => res.blob())
+          // create a url from the binary data
+          .then((blob) => {
+
+
+
+            
+
+
+
+            var link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            //  link.href = uri;
+            link.download = filename;
+            link.target = API + '_target';
+
+//            var btn = document.createElement("button");
+            //  btn.class = "btn";
+            const btn = document.getElementById(API);
+//            btn.type="submit";
+//            btn.style = "width:100%;background-color: DodgerBlue;border: none;color: white;padding: 12px 30px;cursor: pointer;font-size: 20px;";
+            btn.innerHTML = "Download " + filename;
+            link.appendChild(btn);
+//btn.formaction = URL.createObjectURL(blob);
+//            document.body.appendChild(btn);
+
+//const myHeaders = new Headers();
+//myHeaders.append("Content-Disposition", "inline; filename='filename.pdf'");
+
+
+//fetch(url, SETTINGS)
+
+            //Firefox requires the link to be in the body
+            document.body.appendChild(link);
+
+            const frame = document.createElement("iframe");
+            frame.name = API + '_target';
+//            document.body.appendChild(frame);
+
+            if (filename.search(".pdf") > 0 || filename.search(".JPG") > 0 || filename.search(".png") > 0) {
+//              const frame = document.createElement("iframe");
+//              const frame = document.getElementById(API);
+              frame.style = "position:fixed; top:80px; left:0px; bottom:0px; right:0px; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;";
+//              frame.name = API + '_target';
+//              frame.src = url;
+              frame.src = link.href;
+//              show(true);
+              document.body.appendChild(frame);
+//              link.appendChild(frame);
+
+            } else {
+              link.click();
+            }
+          });
+      }
+    }
+
+    function endSession(url, token) {
+
+      let method = "DELETE";
+      let content = "application/json";
+
+      let api = "/databases/" + OPTIONS.db + "/sessions/";
+      let endpoint = __STATUS__.TOKEN;
+
+      fetch(url + api + endpoint, {
+        method: method,
+        headers: {
+          "Content-Type": content
+        }
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log("endSession: " + JSON.stringify(data));
+          __STATUS__.TOKEN = '';
+        })
+        .catch(error => {
+          console.log("Error: ", error);
+        });
+    }
+
+  </script>
+</body>
+
+</html>

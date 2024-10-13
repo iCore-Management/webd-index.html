@@ -1,4 +1,4 @@
-
+//X CLOSEING POOVERS ON CALENDAR XMLHttpRequestUpload
 //EVENT WINDOW ALLOWED OUT OF BUSINESS getHours
 //ACTIVITY CHECKBOXES NOT REFRESHING QUICK ENOUGH
 // IF I WANT TO LOCK RESOURCES FOR USERS, WILL NEED TO SEND THE USERS RESOURCES
@@ -6,40 +6,65 @@
 
 /** DATE CLICKING & SELECTING *****************************************
  * https://fullcalendar.io/docs/date-clicking-selecting
+ * 
+ * selectable: true
+ * selectMirror: true
+ * unselectAuto: true
+ * unselectCancel: null
+ * selectOverlap()
+ * selectConstraint: {start:start,end:open}
+ *    set to "businessHours" if businessHours are set and userAccess=="user"
+ *    set to {start:close, end: open} for userAccess=="user" and !businessHours
+ * selectAllow()
+ *    {start: SETTINGS.calendar.start, end: SETTINGS.calendar.end} all access
+ *    {start: SETTINGS.calendar.close, end: SETTINGS.calendar.open} user access
+ *    SETTINGS.calendar.start: 
+ *    SETTINGS.calendar.end: 
+ *    SETTINGS.calendar.close:
+ *    SETTINGS.calendar.open:
+ *    SETTINGS.USER.id:
+ *    SETTINGS.USER.access:
+ * selectMinDistance: 5
+ * 
+ * dateClick()
+ * select()
+ * unselect()
+ * 
  */
 function selectOverlap(event) {
-  // NOT WORKING IN SCHEDULER 6.1.15
+  // NOT WORKING IN SCHEDULER
   // SENT SERIALLY FOR EACH OVERLAPPING EVENT
   if (event.extendedProps.status == "Support") {
     toaster("Warning: Overlapping support reservation");
   }
-  else if (event.extendedProps.status == "Shutdown") {
-    // !!! CHECK IF SHUTDOWN EVENT RESOURCES IS NULL OR FOR SPECIFIC RESOURCE
+  if (event.extendedProps.status == "Shutdown") {
+    //!!! CHECK IF SHUTDOWN EVENT RESOURCES IS NULL OR FOR SPECIFIC RESOURCE
   }
+
   return event.extendedProps.status != "Shutdown";
 }
-function selectAllow(eventInfo) {
+function selectAllow(selectionInfo) {
   // { start, end, startStr, endStr, allDay, resource }
-  // { response: true, message: "OK" };
-  let newEvent = eventInfo;
+  let newEvent = selectionInfo;
   newEvent.extendedProps = { person: SETTINGS.USER.id };
 
-  // CHECK AGAINST result.message = OK, then show warning...
   let result = isValid(newEvent);
-  if (!result.response || result.message != 'OK') {
+  if (!result.response) {
     toaster(result.message);
-    //  return false;
-  } else if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
+    return false;
+  }
 
-  //  if (result.response && document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
-  return result.response;
+  if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
+  return true;
 }
-function dateClick(eventInfo) {
-  //  {date, datetStr, allDay, jsEvent, view, resource*}
+function dateClick(selectionInfo) {
+  // {date, dateStr, allDay, dayEl, jsEvent, view, resource*}
+  //https://fullcalendar.io/docs/dateClick
+
   // TURN OFF DATECLICK IF NOT SELECTABLE
   if (calendar.getOption("selectable") == false) return false;
-
-  let newEvent = eventInfo;
+  
+  let newEvent = selectionInfo;
   let today = new Date();
   let start = new Date(newEvent.date);
 
@@ -53,58 +78,79 @@ function dateClick(eventInfo) {
   //NEW EVENT VERIFIED IN createEvent
   createEvent(newEvent);
 };
-function select(eventInfo) {
+function select(selectionInfo) {
   // {start, end, startStr, endStr, allDay, jsEvent, view, resource*}
   //https://fullcalendar.io/docs/select-callback
 
   //NEW EVENT VERIFIED IN createEvent
-  createEvent(eventInfo);
+  createEvent(selectionInfo);
 };
 
 
 /** EVENT MODEL ******************************************
  *  https://fullcalendar.io/docs/event-model
+ * 
+ * eventDataTransform()
+ * defaultAllDay: false
+ * defaultAllDayEventDuration
+ * defaultTimedEventDuration
+ * forceEventDuration: true
+ * 
+ * calendar.addEvent(event, sourceID)
+ * 
+ * CALLBACKS
+ * eventAdd()
+ * eventChange()
+ * eventRemove()
+ * 
  */
 
 function eventDataTransform(eventData) {
+  //TRANSFORM eventSourceSuccess ARRAY ITEM TO PARSABLE EVENT OBJECT
   //NOT CONVERTED TO EVENT OBJECT YET
+//  const { constraint } = SETTINGS.SOURCES[index];
   const FIELDS = SETTINGS.QUERY.fields;
+
+  /*  IF USER:
+        AND BUSINESS HOURS; 
+          CALENDAR.EVENTCONSTRAINT = BUSINESSHOURS (CHECK AGAINST EVENT.CONSTRAINT)
+          CALENDAR.SELECTCONSTRAINT = BUSINESSHOURS (CHECK AGAINST EVENT.CONSTRAINT)
+          SOURCE/EVENT.CONSTRAINT = {OPEN, CLOSE}
+
+        NOT BUSINESSHOURS;
+          CALENDAR.EVENTCONSTRAINT = {OPEN, CLOSE}
+          CALENDAR.SELECTCONSTRAINT = {OPEN, CLOSE}
+      IF NOT USER:
+        BUSINESSHOURS = FALSE
+        CALENDAR.EVENTCONSTRAINT = {START, END}
+        CALENDAR.SELECTCONSTRAINT = {START, END}
+   */
 
   let event = {};
   for (const key in FIELDS) {
     event[key] = eventData.fieldData[FIELDS[key]];
   }
-  if (!event.title) event.title = event.name;
+  if ( !event.title ) event.title = event.name;
 
   // UPDATE TEXT DATES TO DATE OBJECTS
   event.start = getDate(event.start);
   event.end = getDate(event.end);
 
-  //USED TO ASSOCIATE RESOUCES (INCLUDES ROOM)
+//  event.constraint = constraint;
+
   if (Array.isArray(eventData.portalData[FIELDS._resourcesPortal])) {
     event.resourceIds = eventData.portalData[FIELDS._resourcesPortal].map((row) => (
       row[FIELDS.resourceId]
-    ));
-    //USED BY FILEMAKER
-    //event::@source = event.key - ( PERSON, ROOM, ACTIVITIES, RESERVATIONS )
-    event.resourceUUIDs = JSON.parse(JSON.stringify(event.resourceIds));
-    event.resourceIds.push(SETTINGS.CALENDAR.id);
-
-    //USED IN HTML DISPLAY
+    )
+    );
     event.resources = eventData.portalData[FIELDS._resourcesPortal].map((row) => ({
-      id: row[FIELDS.resourceId],
-      title: row[FIELDS.resource],
-      status: row[FIELDS.resourceStatus]
-    }));
-
+      uuid: row[FIELDS.resourceId],
+      title: row[FIELDS.resource]
+    })
+  );
 
   };
-  delete event._resourcesPortal;
-  delete event.resourceId;
-  delete event.resource;
-  delete event.resourceStatus;
   event.resourceIds.push(SETTINGS.CALENDAR.id);
-  //  event.resources.push({id:SETTINGS.CALENDAR.id, title: SETTINGS.CALENDAR.title});
 
   let users = [
     event.creator,
@@ -112,33 +158,84 @@ function eventDataTransform(eventData) {
     event.supervisor
   ];
 
-  event.editable = calendar.getOption('editable') && isEventAfterStart(event).response && isEventBeforeEnd(event).response && (users.includes(SETTINGS.USER.id) || SETTINGS.USER.access == "admin") &&
-    (event.status != EVENT_STATUS.canceled);
+//  let validStart = isEventAfterStart({ ...event, constraint: constraint });
+//  let validEnd = isEventBeforeEnd({ ...event, constraint: constraint });
+//  let validStart = isEventAfterStart(event);
+//  let validEnd = isEventBeforeEnd(event);
 
+  event.editable = calendar.getOption('editable') && isEventAfterStart(event).response && isEventBeforeEnd(event).response && (users.includes(SETTINGS.USER.id) || SETTINGS.USER.access == "admin") &&
+    ( event.status != EVENT_STATUS.canceled );
+
+
+//    console.log(event.editable);
   return formatEvent(event);
 }
 
-function eventAdd(addInfo) {
+function eventAdd(eventInfo) {
   // { event, relatedEvents, revert }
+  // SAVE eventInfo to hear callback from FM?
+  SETTINGS._EVENT = eventInfo;
   // Triggered from Events:newEvent
-  //REAL EVENT OBJECT
-  //EVENTS
-  addEvent(addInfo);
+  // VERIFY EVENT AND REVERT()
+  //  eventInfo.revert();
+  let event = eventInfo.event.toPlainObject();
+  /**
+   * WILL REFETCH EVENTS ANYWAY, SO DISAPEARS IF NOT ADDED IN FM
+   */
+//  calendar.unselect();
+  let notify = SETTINGS.USER.id != eventInfo.event.extendedProps.person;
+  // CALLBACK FILEMAKER WITH ERROR MESSSAGE? COMMIT OR NOT COMMIT?
+  let param = {
+    method: API + ".newEvent",
+    config: { webviewer: WEBVIEWER, function: "refetchEvents" },
+    data: {
+      event: {
+        ...event, start: getTimestampString(event.start), end: getTimestampString(event.end),
+        person: SETTINGS.USER.id, source: eventInfo.event.source.id, notify : notify
+      }
+    },
+  };
+  FileMaker.PerformScriptWithOption(
+    SCRIPT,
+    JSON.stringify(param),
+    5
+  );
+
 }
-function eventChange(changeInfo) {
+function eventChange(eventInfo) {
   //https://fullcalendar.io/docs/eventChange
-  // { event, relatedEvents, oldEvent, revert }
-  //REAL EVENT OBJECT
-  //EVENTS
-  changeEvent(changeInfo);
+  SETTINGS._EVENT = eventInfo;
 
+  if (SETTINGS.USER.id != eventInfo.event.extendedProps.person) {
+    //CREATE MODAL CONFIRMATION
+//    let event = eventInfo.event;
+    eventInfo.title = "Confirm Update";
+    eventInfo.close = `onclick="eventUpdated(false)"`;
+    eventInfo.footer = `
+      <button type="button" onclick="eventUpdated(false)" class="btn btn-warning" data-bs-dismiss="modal">Cancel</button>
+      <button type="button" onclick="updateEvent('${eventInfo.event.id}',true)" class="btn btn-secondary" data-bs-dismiss="modal">Confirm and Notify</button>
+      <button type="button" onclick="updateEvent('${eventInfo.event.id}')" class="btn btn-primary" data-bs-dismiss="modal">Confirm</button>`;
+
+    
+    showModal(eventInfo);
+  } else {
+    updateEvent(eventInfo.event.id);
+  }
 };
-function eventRemove(removeInfo) {
-  //{event, relatedEvents, revert}
-  //REAL EVENT OBJECT
-  //EVENTS
-  removeEvent(removeInfo);
+function eventRemove(eventInfo) {
+  //REMOVE EVENT
+  let notify = SETTINGS.USER.id != eventInfo.event.extendedProps.person;
 
+  let param = {
+    method: API + ".eventRemove",
+    config: { webviewer: WEBVIEWER, function: "" },
+    data: { event: eventInfo.event, notify: notify },
+  };
+  FileMaker.PerformScriptWithOption(
+    SCRIPT,
+    JSON.stringify(param),
+    5
+  );
 };
 
 
@@ -159,12 +256,12 @@ async function events(fetchInfo, successCallback, failureCallback) {
 
   let result = await fetchEvents(fetchInfo);
 
-  //  console.log(result.messages[0].code);
+//  console.log(result.messages[0].code);
   if (result.messages[0].code == '0') {
     successCallback(result);
   } else if (result.messages[0].code == '401') {
     //  OK, records not found
-    //    console.log("Not Found");
+//    console.log("Not Found");
     loading(false);
     failureCallback();
   } else {
@@ -173,11 +270,6 @@ async function events(fetchInfo, successCallback, failureCallback) {
   }
 }
 function eventSourceSuccess(rawEvents, response) {
-  //ALSO HAS LAYOUT TABLE DATA HERE...rawEvents.response.dataInfo.table
-  if (!SETTINGS.QUERY.table) {
-    SETTINGS.QUERY.table = rawEvents.response.dataInfo.table;
-    SETTINGS.QUERY.fields = getEventFields(SETTINGS.QUERY.table, SETTINGS.QUERY.fields);
-  }
   return rawEvents.response.data;
 }
 function eventSourceFailure(messages) { }
@@ -189,7 +281,7 @@ function loading(isLoading) {
     let popoverInstance = bootstrap.Popover.getOrCreateInstance(el);
     popoverInstance.hide();
   });
-
+  
   let content = `
     <div class="toast-body d-flex justify-content-between">
       <div>Loading Events...</div>
@@ -289,7 +381,7 @@ function eventClick(eventInfo) {
   bootstrap.Popover.getInstance(eventInfo.el).hide();
 
   eventInfo.title = eventInfo.event.title;
-  eventInfo.footer = !SETTINGS.CALENDAR.editing && (eventInfo.event.startEditable || eventInfo.event.durationEditable) ? `
+  eventInfo.footer = eventInfo.event.startEditable || eventInfo.event.durationEditable ? `
     <button id="eventDelete" onclick="deleteEvent('${eventInfo.event.id}')" type="button" class="btn btn-danger" data-bs-dismiss="modal">Delete</button>
     <button id="eventEdit" onclick="viewEvent('${eventInfo.event.id}')" type="button" class="btn btn-primary" data-bs-dismiss="modal">Edit</button>
   ` : "";
@@ -334,17 +426,6 @@ function eventOverlap(stillEvent, movingEvent) {
   // movingEvent start and end not yet updated
   // called on each event, doesn't provide list of all overlapping events
   if (stillEvent.extendedProps.status == "Support") {
-
-    /**
-     * status = 'Support' && ( resourceIds? empty || resource IDs in movingevent...)
-     * 
-     * 
-     * CHECKED IN ISVALID? GET WARNING/RESPONSE?
-     * CHECK AGAINST EVENT ACTIVITIES...?
-     * 
-     */
-
-
     toaster("Warning: Overlapping support reservation");
   }
 
@@ -358,22 +439,21 @@ function eventOverlap(stillEvent, movingEvent) {
 };
 function eventAllow(dropInfo, draggedEvent) {
 
-  //  console.log("EventAllow");
+//  console.log("EventAllow");
   var newEvent = draggedEvent.toPlainObject();
   newEvent.start = new Date(dropInfo.start);
   newEvent.end = new Date(dropInfo.end);
-  newEvent.resource = dropInfo.resource;
 
-  //  console.log(dropInfo.resource.extendedProps);
-  //  console.log(draggedEvent);
-  // DOES PLAIN OBJECT RETAIN CONSTRAINT??
-  // CHECK AGAINST result.message = OK, then show warning...
+  // DOES PLAIN OBJECT RETRAIN CONSTRAINT??
   let result = isValid(newEvent);
-  if (!result.response || result.message != 'OK') {
+//  console.log(result);
+  if (!result.response) {
     toaster(result.message);
-    //  return false;
-  } else if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
-  return result.response;
+    return false;
+  }
+
+  if (document.getElementById("warning")) bootstrap.Toast.getOrCreateInstance(document.getElementById("warning")).hide();
+  return true;
 };
 
 function eventDragStop(changeInfo) {
@@ -405,25 +485,15 @@ function eventContent(arg) {
   }
   let edit = event.startEditable || event.durationEditable ? `
   <i class="bi bi-pencil-fill"></i>` : "";
-  /*
-    let resources = event.getResources();
-    let resourceList = '';
-    resources.forEach(element => {
-      resourceList += `<li>${element.title}</li>`;
-    });
-  */
 
-  let resources = '';
-  if (event.extendedProps.resources?.[0] ?? false) {
+  let resources = "";
+  if (event.extendedProps?.resources?.length ?? false) {
     event.extendedProps.resources.forEach((resource) => {
       resources += `<li>${resource.title}</li>`;
     });
     resources = `<div class="mt-1 pr-2 small">Resources:
     <ul>${resources}</ul></div>`;
   };
-
-
-
   /*
     if (arg.view.type === "dayGridMonth") {
       /*
