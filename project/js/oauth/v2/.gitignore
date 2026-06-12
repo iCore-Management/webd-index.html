@@ -1,1 +1,4 @@
+# Ignore vendor / drop-in scripts (e.g. Claris home.js, fmwebd_oauth.js)
 *.js
+# ...but track our own integration script
+!oauth.js

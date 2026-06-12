@@ -31,14 +31,19 @@
 
     function init(data = '{}') {
       let settings = JSON.parse(data);
-      if (settings.function != null && settings.function != 'activate') window[settings.function](JSON.stringify(settings.options));
+      let fn = settings.function;
+      /* Only dispatch to a real, named function (never re-enter 'activate') */
+      if (fn != null && fn != 'activate' && typeof window[fn] === 'function') {
+        window[fn](JSON.stringify(settings.options));
+      }
     }
 
     function activate(data = '{}') {
       /* RUN FUNCTION WITH OPTIONS */
       init(data);
 
-      /* CALL FM TO REPORT ACTIVE */
+      /* CALL FM TO REPORT ACTIVE (give up after ~10s if not in a FileMaker web viewer) */
+      let attempts = 0;
       let active = setInterval(() => {
         if (window.FileMaker) {
           clearInterval(active);
@@ -53,6 +58,8 @@
             JSON.stringify(param),
             5
           );
+        } else if (++attempts > 100) {
+          clearInterval(active);
         }
       }, 100);
     }
@@ -79,10 +86,11 @@
       __STATUS__.options = JSON.parse(options);
       show(true);
       getProviderInfo(function (providerInfo) {
-        let data = providerInfo ? JSON.parse(providerInfo).data : '';
-        if (data != null && data != '' && DBNAME != '') {
-          showOAuthLogin(data.Provider[0].Name);
-
+        let data = '';
+        try { data = providerInfo ? JSON.parse(providerInfo).data : ''; } catch (e) { data = ''; }
+        let provider = (data && Array.isArray(data.Provider) && data.Provider.length) ? data.Provider[0].Name : '';
+        if (provider && DBNAME != '') {
+          showOAuthLogin(provider);
         } else FRAME.src = LOGIN;
       });
       if (__STATUS__.notice) alert(__STATUS__.notice);
@@ -96,9 +104,13 @@
 
     const
       APP = URL_PARAMETERS.get('app'),
-      DBNAME = APP ? APP.replace('-', ' ').replace('+', ' ') : '',
-      HIDELOGIN = 'hidelocalaccountentry=1',
-      PARAM = (URL_PARAMETERS.size ? URL_PARAMETERS.toString() + '&' : '') + HIDELOGIN;
+      DBNAME = APP ? APP.replace(/[-+]/g, ' ') : '',
+      HIDELOGIN = 'hidelocalaccountentry=1';
+
+    /* Pass extra query params through to WebDirect, but drop our own control keys */
+    const PASSTHRU = new URLSearchParams(URL_PARAMETERS);
+    ['app', 'script', 'webviewer'].forEach(k => PASSTHRU.delete(k));
+    const PARAM = (PASSTHRU.size ? PASSTHRU.toString() + '&' : '') + HIDELOGIN;
 
     const FRAME = document.getElementById(API);
 
@@ -112,11 +124,20 @@
         alert('Please disable pop-up blockers for this site, then continue.');
         child = window.open('/js/oauth/popup.html', providerName, 'width=800, height=600');
         /* POPUPS still blocked, go to login screen */
-        if (child == null) FRAME.src = LOGIN;
+        if (child == null) {
+          FRAME.src = LOGIN;
+          return;
+        }
       }
 
       const TRACKER = guid();
       getOAuthURL(TRACKER, HOST, providerName, function (oauthUrl, requestId) {
+        /* OAuth URL lookup failed or returned empty — fall back to the login screen */
+        if (!oauthUrl) {
+          child.close();
+          FRAME.src = LOGIN;
+          return;
+        }
         child.location.replace(oauthUrl);
         window.addEventListener('storage', function processOAuthResponse(event) {
           let response = event.newValue;
